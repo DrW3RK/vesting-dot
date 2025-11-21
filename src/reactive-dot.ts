@@ -11,9 +11,6 @@ const lightClientProvider = createLightClientProvider();
 const polkadotChain = lightClientProvider.addRelayChain({ id: "polkadot" });
 const polkadotAHChain = polkadotChain.addParachain({ id: "polkadot_asset_hub" });
 
-const paseoChain = lightClientProvider.addRelayChain({ id: "paseo" });
-const paseoAHChain = paseoChain.addParachain({ id: "paseo_asset_hub" });
-
 export const config = defineConfig({
   chains: {
     polkadot: {
@@ -23,14 +20,6 @@ export const config = defineConfig({
     polkadot_asset_hub: {
       descriptor: polkadot_asset_hub,
       provider: polkadotAHChain,
-    },
-    paseo: {
-      descriptor: paseo,
-      provider: paseoChain,
-    },
-    paseo_asset_hub: {
-      descriptor: paseo_asset_hub,
-      provider: paseoAHChain,
     },
   },
   wallets: [

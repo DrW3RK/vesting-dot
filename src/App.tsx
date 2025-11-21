@@ -12,7 +12,7 @@ import Loading from "./components/Loading";
 import { config } from "./reactive-dot";
 
 function App() {
-  const [chainId, setChainId] = useState<ChainId>("paseo");
+  const [chainId, setChainId] = useState<ChainId>("polkadot_asset_hub");
 
   return (
     <ReactiveDotProvider config={config}>
