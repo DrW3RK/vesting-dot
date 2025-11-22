@@ -1,25 +1,20 @@
 import { polkadot, polkadot_asset_hub} from "@polkadot-api/descriptors";
+import { getWsProvider } from "@polkadot-api/ws-provider/web";
 import { defineConfig } from "@reactive-dot/core";
-import { createLightClientProvider } from "@reactive-dot/core/providers/light-client.js";
 import { InjectedWalletProvider } from "@reactive-dot/core/wallets.js";
 import { LedgerWallet } from "@reactive-dot/wallet-ledger";
 // import { WalletConnect } from "@reactive-dot/wallet-walletconnect";
 import { registerDotConnect } from "dot-connect";
 
-const lightClientProvider = createLightClientProvider();
-
-const polkadotChain = lightClientProvider.addRelayChain({ id: "polkadot" });
-const polkadotAHChain = polkadotChain.addParachain({ id: "polkadot_asset_hub" });
-
 export const config = defineConfig({
   chains: {
     polkadot: {
       descriptor: polkadot,
-      provider: polkadotChain,
+      provider: getWsProvider("wss://rpc.polkadot.io"),
     },
     polkadot_asset_hub: {
       descriptor: polkadot_asset_hub,
-      provider: polkadotAHChain,
+      provider: getWsProvider("wss://polkadot-asset-hub-rpc.polkadot.io"),
     },
   },
   wallets: [
