@@ -249,7 +249,7 @@ export function VestingGraph({ vestingInfo, currentRelayBlock, title, scheduleIn
                     />
                   );
                 }
-                return null;
+                return false as any;
               }}
             />
           </AreaChart>
