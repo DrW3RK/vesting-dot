@@ -59,10 +59,13 @@ function LockedVestingAmount({
   const lockedVesting = totalLocked - totalUnlocked;
 
   return (
-    <div className="rounded border border-gray-300 bg-gray-100 p-4 dark:border-gray-600 dark:bg-gray-900/50">
-      <div className="text-sm text-gray-600 dark:text-gray-400">Locked Vesting DOT</div>
-      <div className="font-mono text-2xl font-bold text-pink-600 dark:text-pink-400">
+    <div className="rounded-lg border-2 border-pink-300 bg-gradient-to-br from-pink-50 to-white p-5 shadow-md dark:border-pink-700 dark:from-pink-900/20 dark:to-gray-800/50">
+      <div className="text-sm font-semibold text-gray-600 dark:text-gray-400">Total Locked Vesting DOT</div>
+      <div className="font-mono text-3xl font-bold text-pink-600 dark:text-pink-400">
         {(Number(lockedVesting) / 1e10).toFixed(4)} DOT
+      </div>
+      <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        Across {vestingInfo.length} vesting schedule{vestingInfo.length !== 1 ? 's' : ''}
       </div>
     </div>
   );
@@ -214,7 +217,7 @@ function AccountVesting({
       </div>
 
       {/* Unlock Vested Button */}
-      <div className="mb-4">
+      <div className="mb-6">
         <button
           onClick={handleUnlockVested}
           disabled={buttonState.disabled}
@@ -232,19 +235,55 @@ function AccountVesting({
         )}
       </div>
 
-      {/* Locked Vesting Amount */}
-      <div className="mt-4">
+      {/* Aggregate Locked Vesting Amount */}
+      <div className="mb-6">
         <LockedVestingAmount 
           vestingInfo={vestingInfo as VestingSchedule[]} 
           relayChainBlock={relayChainBlock}
         />
       </div>
 
-      {/* Vesting Timeline Graph */}
-      <VestingGraph 
-        vestingInfo={vestingInfo as VestingSchedule[]}
-        currentRelayBlock={relayChainBlock}
-      />
+      {/* Individual Vesting Schedules */}
+      {vestingInfo.length > 1 && (
+        <div className="mb-6">
+          <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
+            Individual Vesting Schedules
+          </h3>
+          <div className="space-y-6">
+            {(vestingInfo as VestingSchedule[]).map((schedule, index) => (
+              <VestingGraph
+                key={index}
+                vestingInfo={[schedule]}
+                currentRelayBlock={relayChainBlock}
+                title={`Schedule #${index + 1} Unlock Timeline`}
+                scheduleIndex={index}
+              />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Aggregate Vesting Timeline Graph (only show for multiple schedules) */}
+      {vestingInfo.length > 1 && (
+        <div className="mb-6">
+          <h3 className="mb-4 text-lg font-semibold text-gray-900 dark:text-white">
+            Combined Vesting Timeline
+          </h3>
+          <VestingGraph 
+            vestingInfo={vestingInfo as VestingSchedule[]}
+            currentRelayBlock={relayChainBlock}
+            title="All Schedules Combined"
+          />
+        </div>
+      )}
+
+      {/* Single Vesting Schedule Timeline */}
+      {vestingInfo.length === 1 && (
+        <VestingGraph 
+          vestingInfo={vestingInfo as VestingSchedule[]}
+          currentRelayBlock={relayChainBlock}
+        />
+      )}
     </div>
   );
 }

@@ -10,13 +10,15 @@ interface VestingSchedule {
 interface VestingGraphProps {
   vestingInfo: VestingSchedule[];
   currentRelayBlock: bigint;
+  title?: string;
+  scheduleIndex?: number;
 }
 
 // Polkadot relay chain has ~6 second block time
 const BLOCK_TIME_SECONDS = 6;
 const BLOCKS_PER_DAY = (24 * 60 * 60) / BLOCK_TIME_SECONDS;
 
-export function VestingGraph({ vestingInfo, currentRelayBlock }: VestingGraphProps) {
+export function VestingGraph({ vestingInfo, currentRelayBlock, title, scheduleIndex }: VestingGraphProps) {
   const { chartData, totalLocked, currentLockedVesting, fullyUnlockedBlock, fullyUnlockedDate } = useMemo(() => {
     // Calculate total locked across all vesting schedules
     let totalLocked = 0n;
@@ -152,10 +154,21 @@ export function VestingGraph({ vestingInfo, currentRelayBlock }: VestingGraphPro
     Number(fullyUnlockedBlock - currentRelayBlock) / BLOCKS_PER_DAY
   );
 
+  // Determine the display title
+  const displayTitle = title || "Vesting Unlock Timeline";
+  const isIndividualSchedule = scheduleIndex !== undefined;
+
   return (
     <div className="mt-6 rounded-lg border border-gray-300 bg-white p-6 dark:border-gray-700 dark:bg-gray-800/50">
       <div className="mb-4">
-        <h3 className="text-xl font-bold text-gray-900 dark:text-white">Vesting Unlock Timeline</h3>
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+          {displayTitle}
+        </h3>
+        {isIndividualSchedule && (
+          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+            Unlock timeline for schedule #{scheduleIndex + 1}
+          </p>
+        )}
       </div>
 
       <div className="mb-4 grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -188,7 +201,7 @@ export function VestingGraph({ vestingInfo, currentRelayBlock }: VestingGraphPro
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData}>
             <defs>
-              <linearGradient id="colorLocked" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={`colorLocked-${scheduleIndex ?? 'aggregate'}`} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#ec4899" stopOpacity={0.3}/>
                 <stop offset="95%" stopColor="#ec4899" stopOpacity={0}/>
               </linearGradient>
@@ -223,7 +236,7 @@ export function VestingGraph({ vestingInfo, currentRelayBlock }: VestingGraphPro
               dataKey="lockedDOT"
               stroke="#ec4899"
               strokeWidth={2}
-              fill="url(#colorLocked)"
+              fill={`url(#colorLocked-${scheduleIndex ?? 'aggregate'})`}
               dot={(props: any) => {
                 if (props.payload.isCurrent) {
                   return (
