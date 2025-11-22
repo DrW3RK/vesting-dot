@@ -86,6 +86,36 @@ function ReadOnlyAccountVesting({
 
   const hasVesting = vestingInfo && Array.isArray(vestingInfo) && vestingInfo.length > 0;
 
+  // Calculate locked vesting for transferable balance calculation
+  let currentLockedVesting = 0n;
+  if (hasVesting) {
+    let totalLocked = 0n;
+    let totalUnlocked = 0n;
+
+    (vestingInfo as VestingSchedule[]).forEach((schedule) => {
+      const locked = BigInt(schedule.locked);
+      const perBlock = BigInt(schedule.per_block);
+      const startingBlock = BigInt(schedule.starting_block);
+      
+      totalLocked += locked;
+      
+      const blocksElapsed = relayChainBlock > startingBlock ? relayChainBlock - startingBlock : 0n;
+      const unlocked = blocksElapsed * perBlock;
+      
+      if (unlocked >= locked) {
+        totalUnlocked += locked;
+      } else {
+        totalUnlocked += unlocked;
+      }
+    });
+
+    currentLockedVesting = totalLocked - totalUnlocked;
+  }
+
+  // Transferable balance = free balance - locked vesting
+  const transferableBalance = BigInt(freeBalance) - currentLockedVesting;
+  const actualTransferable = transferableBalance < 0n ? 0n : transferableBalance;
+
   if (!hasVesting) {
     return (
       <div className="my-4 rounded-lg border border-gray-300 bg-white/80 p-6 dark:border-gray-700 dark:bg-gray-800/50">
@@ -102,7 +132,7 @@ function ReadOnlyAccountVesting({
             </div>
           </div>
           <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-            <div className="text-xs text-gray-600 dark:text-gray-400">Free Balance</div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">Transferable Balance</div>
             <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
               {(Number(freeBalance) / 1e10).toFixed(4)} DOT
             </div>
@@ -130,9 +160,9 @@ function ReadOnlyAccountVesting({
           </div>
         </div>
         <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-          <div className="text-xs text-gray-600 dark:text-gray-400">Free Balance</div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">Transferable Balance</div>
           <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-            {(Number(freeBalance) / 1e10).toFixed(4)} DOT
+            {(Number(actualTransferable) / 1e10).toFixed(4)} DOT
           </div>
         </div>
       </div>
