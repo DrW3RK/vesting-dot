@@ -133,28 +133,56 @@ function AccountVesting({
     // If error occurred but timeout passed, show idle state
     if (!showError && (vestState instanceof MutationError || 
         (vestState !== idle && vestState !== pending && vestState.type === "finalized" && !vestState.ok))) {
-      return { text: "Unlock Vested DOT", className: "bg-pink-600 text-white hover:bg-pink-700", disabled: false };
+      return { 
+        text: "Unlock Vested DOT", 
+        className: "border-2 border-pink-700 bg-gradient-to-r from-pink-600 to-pink-700 text-white shadow-lg hover:from-pink-700 hover:to-pink-800 hover:shadow-xl dark:border-pink-600 dark:from-pink-600 dark:to-pink-700 dark:hover:from-pink-500 dark:hover:to-pink-600", 
+        disabled: false 
+      };
     }
     
     if (vestState === idle) {
-      return { text: "Unlock Vested DOT", className: "bg-pink-600 text-white hover:bg-pink-700", disabled: false };
+      return { 
+        text: "Unlock Vested DOT", 
+        className: "border-2 border-pink-700 bg-gradient-to-r from-pink-600 to-pink-700 text-white shadow-lg hover:from-pink-700 hover:to-pink-800 hover:shadow-xl dark:border-pink-600 dark:from-pink-600 dark:to-pink-700 dark:hover:from-pink-500 dark:hover:to-pink-600", 
+        disabled: false 
+      };
     }
     if (vestState === pending) {
-      return { text: "Unlocking Vested DOT...", className: "cursor-not-allowed bg-gray-400 text-gray-700 dark:bg-gray-600 dark:text-gray-400", disabled: true };
+      return { 
+        text: "Unlocking Vested DOT...", 
+        className: "cursor-not-allowed border-2 border-gray-500 bg-gray-500 text-white opacity-70 shadow-md dark:border-gray-600 dark:bg-gray-600", 
+        disabled: true 
+      };
     }
     if (vestState instanceof MutationError) {
-      return { text: "✗ Transaction Failed", className: "bg-red-600 text-white", disabled: false };
+      return { 
+        text: "✗ Transaction Failed", 
+        className: "border-2 border-red-700 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg dark:border-red-600 dark:from-red-600 dark:to-red-700", 
+        disabled: false 
+      };
     }
     // Transaction event states
     if (vestState.type === "finalized") {
       if (vestState.ok) {
-        return { text: "✓ Unlocked Successfully!", className: "bg-green-600 text-white", disabled: false };
+        return { 
+          text: "✓ Unlocked Successfully!", 
+          className: "border-2 border-green-700 bg-gradient-to-r from-green-600 to-green-700 text-white shadow-lg dark:border-green-600 dark:from-green-600 dark:to-green-700", 
+          disabled: false 
+        };
       } else {
-        return { text: "✗ Transaction Failed", className: "bg-red-600 text-white", disabled: false };
+        return { 
+          text: "✗ Transaction Failed", 
+          className: "border-2 border-red-700 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg dark:border-red-600 dark:from-red-600 dark:to-red-700", 
+          disabled: false 
+        };
       }
     }
     // Other states like "broadcasted", "txBestBlocksState"
-    return { text: "Processing...", className: "cursor-not-allowed bg-gray-400 text-gray-700 dark:bg-gray-600 dark:text-gray-400", disabled: true };
+    return { 
+      text: "Processing...", 
+      className: "cursor-not-allowed border-2 border-gray-500 bg-gray-500 text-white opacity-70 shadow-md dark:border-gray-600 dark:bg-gray-600", 
+      disabled: true 
+    };
   };
 
   const buttonState = getButtonState();
@@ -221,7 +249,7 @@ function AccountVesting({
         <button
           onClick={handleUnlockVested}
           disabled={buttonState.disabled}
-          className={`w-full rounded-lg px-4 py-3 font-semibold transition-colors ${buttonState.className}`}
+          className={`w-full rounded-lg px-4 py-3 font-semibold !text-white transition-all duration-200 ${buttonState.className}`}
         >
           {buttonState.text}
         </button>
