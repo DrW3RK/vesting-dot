@@ -9,9 +9,10 @@ import { ChainSwitch } from "./components/ChainSwitch";
 import Loading from "./components/Loading";
 import { VestingSchedule } from "./components/VestingSchedule";
 import { ReadOnlyPage } from "./components/ReadOnlyPage";
+import { VestOtherPage } from "./components/VestOtherPage";
 import { config } from "./reactive-dot";
 
-type PageMode = "wallet" | "readonly";
+type PageMode = "wallet" | "readonly" | "vestother";
 
 function App() {
   const [chainId, setChainId] = useState<ChainId>("polkadot_asset_hub");
@@ -43,11 +44,21 @@ function App() {
             >
               📖 Read-Only Mode
             </button>
+            <button
+              onClick={() => setPageMode("vestother")}
+              className={`rounded-md px-4 py-2 text-sm font-semibold transition-colors ${
+                pageMode === "vestother"
+                  ? "bg-pink-600 text-white"
+                  : "text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+              }`}
+            >
+              🎁 Vest Other
+            </button>
           </div>
         </div>
 
-        {/* Wallet and chain controls (only show in wallet mode) */}
-        {pageMode === "wallet" && (
+        {/* Wallet and chain controls (show in wallet and vestother modes) */}
+        {(pageMode === "wallet" || pageMode === "vestother") && (
           <div className="fixed right-10 top-10 z-50">
             <div className="ml-5 inline-block">
               <ConnectionButton />
@@ -63,8 +74,10 @@ function App() {
           
           {pageMode === "wallet" ? (
             <VestingSchedule />
-          ) : (
+          ) : pageMode === "readonly" ? (
             <ReadOnlyPage />
+          ) : (
+            <VestOtherPage />
           )}
         </Suspense>
       </ChainProvider>
