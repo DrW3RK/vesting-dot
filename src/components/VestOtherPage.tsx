@@ -80,10 +80,6 @@ function VestOtherAccountVesting({
     builder.storage("Vesting", "Vesting", [targetAddress])
   );
 
-  const accountInfo = useLazyLoadQuery((builder) =>
-    builder.storage("System", "Account", [targetAddress])
-  );
-
   // Use mutation with signer from connected account - calling vest_other with target address
   const [vestState, submitVest] = useMutation(
     (tx) => tx.Vesting.vest_other({ target: { type: "Id", value: targetAddress } }),
@@ -107,10 +103,6 @@ function VestOtherAccountVesting({
       setShowError(true);
     }
   }, [vestState]);
-
-  const freeBalance = accountInfo?.data?.free || 0n;
-  const reservedBalance = accountInfo?.data?.reserved || 0n;
-  const fullBalance = BigInt(freeBalance) + BigInt(reservedBalance);
 
   const handleUnlockVested = () => {
     submitVest();
@@ -183,21 +175,6 @@ function VestOtherAccountVesting({
         </div>
         <div className="font-mono text-xs text-gray-600 dark:text-gray-500">{targetAddress}</div>
         
-        <div className="mt-4 grid grid-cols-2 gap-4">
-          <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-            <div className="text-xs text-gray-600 dark:text-gray-400">Full Balance</div>
-            <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-              {(Number(fullBalance) / 1e10).toFixed(4)} DOT
-            </div>
-          </div>
-          <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-            <div className="text-xs text-gray-600 dark:text-gray-400">Free Balance</div>
-            <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-              {(Number(freeBalance) / 1e10).toFixed(4)} DOT
-            </div>
-          </div>
-        </div>
-        
         <div className="mt-4 text-center text-gray-600 dark:text-gray-400">No vesting schedule found</div>
       </div>
     );
@@ -208,22 +185,6 @@ function VestOtherAccountVesting({
       <div className="mb-4">
         <div className="text-lg font-bold text-gray-900 dark:text-white">Target Account Details</div>
         <div className="font-mono text-xs text-gray-600 dark:text-gray-500">{targetAddress}</div>
-      </div>
-
-      {/* Balance Information */}
-      <div className="mb-6 grid grid-cols-2 gap-4">
-        <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-          <div className="text-xs text-gray-600 dark:text-gray-400">Full Balance</div>
-          <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-            {(Number(fullBalance) / 1e10).toFixed(4)} DOT
-          </div>
-        </div>
-        <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-          <div className="text-xs text-gray-600 dark:text-gray-400">Free Balance</div>
-          <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-            {(Number(freeBalance) / 1e10).toFixed(4)} DOT
-          </div>
-        </div>
       </div>
 
       {/* Unlock Vested Button */}
