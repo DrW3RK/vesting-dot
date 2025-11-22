@@ -1,4 +1,4 @@
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
+import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from 'recharts';
 import { useMemo } from 'react';
 
 interface VestingSchedule {
@@ -19,7 +19,7 @@ const BLOCK_TIME_SECONDS = 6;
 const BLOCKS_PER_DAY = (24 * 60 * 60) / BLOCK_TIME_SECONDS;
 
 export function VestingGraph({ vestingInfo, currentRelayBlock, title, scheduleIndex }: VestingGraphProps) {
-  const { chartData, totalLocked, currentLockedVesting, fullyUnlockedBlock, fullyUnlockedDate } = useMemo(() => {
+  const { chartData, currentLockedVesting, fullyUnlockedBlock, fullyUnlockedDate } = useMemo(() => {
     // Calculate total locked across all vesting schedules
     let totalLocked = 0n;
     let latestEndBlock = 0n;
@@ -115,14 +115,13 @@ export function VestingGraph({ vestingInfo, currentRelayBlock, title, scheduleIn
     
     return {
       chartData: data,
-      totalLocked,
       currentLockedVesting,
       fullyUnlockedBlock: latestEndBlock,
       fullyUnlockedDate,
     };
   }, [vestingInfo, currentRelayBlock]);
 
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: any[] }) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
       const isToday = data.isCurrent;
@@ -149,7 +148,6 @@ export function VestingGraph({ vestingInfo, currentRelayBlock, title, scheduleIn
     return null;
   };
 
-  const currentDataPoint = chartData.find(d => d.isCurrent) || chartData[0];
   const daysUntilFullyUnlocked = Math.ceil(
     Number(fullyUnlockedBlock - currentRelayBlock) / BLOCKS_PER_DAY
   );
@@ -237,12 +235,13 @@ export function VestingGraph({ vestingInfo, currentRelayBlock, title, scheduleIn
               stroke="#ec4899"
               strokeWidth={2}
               fill={`url(#colorLocked-${scheduleIndex ?? 'aggregate'})`}
-              dot={(props: any) => {
-                if (props.payload.isCurrent) {
+              dot={(props) => {
+                const typedProps = props as { payload?: { isCurrent?: boolean }; cx?: number; cy?: number };
+                if (typedProps.payload?.isCurrent) {
                   return (
                     <circle
-                      cx={props.cx}
-                      cy={props.cy}
+                      cx={typedProps.cx}
+                      cy={typedProps.cy}
                       r={6}
                       fill="#3b82f6"
                       stroke="#fff"
