@@ -1,4 +1,4 @@
-import { polkadot, paseo, polkadot_asset_hub, paseo_asset_hub } from "@polkadot-api/descriptors";
+import { polkadot, polkadot_asset_hub} from "@polkadot-api/descriptors";
 import { defineConfig } from "@reactive-dot/core";
 import { createLightClientProvider } from "@reactive-dot/core/providers/light-client.js";
 import { InjectedWalletProvider } from "@reactive-dot/core/wallets.js";
