@@ -97,6 +97,24 @@ function AccountVesting({
     { signer: account?.polkadotSigner }
   );
 
+  // State to track if we should hide the error after timeout
+  const [showError, setShowError] = useState(true);
+
+  // Auto-reset error state after 3 seconds
+  useEffect(() => {
+    if (vestState instanceof MutationError || 
+        (vestState !== idle && vestState !== pending && vestState.type === "finalized" && !vestState.ok)) {
+      setShowError(true);
+      const timer = setTimeout(() => {
+        setShowError(false);
+      }, 3000);
+
+      return () => clearTimeout(timer);
+    } else {
+      setShowError(true);
+    }
+  }, [vestState]);
+
   // Extract balance information
   const freeBalance = accountInfo?.data?.free || 0n;
   const reservedBalance = accountInfo?.data?.reserved || 0n;
@@ -111,6 +129,12 @@ function AccountVesting({
 
   // Determine button state based on mutation state
   const getButtonState = () => {
+    // If error occurred but timeout passed, show idle state
+    if (!showError && (vestState instanceof MutationError || 
+        (vestState !== idle && vestState !== pending && vestState.type === "finalized" && !vestState.ok))) {
+      return { text: "Unlock Vested DOT", className: "bg-pink-600 text-white hover:bg-pink-700", disabled: false };
+    }
+    
     if (vestState === idle) {
       return { text: "Unlock Vested DOT", className: "bg-pink-600 text-white hover:bg-pink-700", disabled: false };
     }
@@ -133,7 +157,7 @@ function AccountVesting({
   };
 
   const buttonState = getButtonState();
-  const errorMessage = vestState instanceof MutationError ? vestState.message : null;
+  const errorMessage = (vestState instanceof MutationError && showError) ? vestState.message : null;
 
   if (!hasVesting) {
     return (
