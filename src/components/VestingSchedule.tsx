@@ -3,6 +3,7 @@ import { idle, MutationError, pending } from "@reactive-dot/core";
 import { getWalletMetadata } from "dot-connect";
 import { useState, useEffect } from "react";
 import { VestingGraph } from "./VestingGraph";
+import { ContactFooter } from "./ContactFooter";
 
 interface VestingSchedule {
   locked: bigint | number;
@@ -329,6 +330,8 @@ export function VestingSchedule() {
           <p className="text-gray-600 dark:text-gray-400">No accounts connected</p>
           <p className="mt-2 text-sm text-gray-500">Click "Connect Wallet" in the top right to get started</p>
         </div>
+
+        <ContactFooter />
       </div>
     );
   }
@@ -342,6 +345,8 @@ export function VestingSchedule() {
         <ChainProvider chainId="polkadot">
           <RelayChainBlockFetcher onBlockFetched={setRelayChainBlock} />
         </ChainProvider>
+
+        <ContactFooter />
       </div>
     );
   }
@@ -370,6 +375,8 @@ export function VestingSchedule() {
             );
           })}
         </div>
+
+        <ContactFooter />
       </div>
     </ChainProvider>
   );

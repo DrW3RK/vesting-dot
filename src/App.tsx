@@ -64,7 +64,15 @@ function App() {
         )}
 
         <Suspense fallback={<Loading />}>
-          <img src={polkadotLogo} className="logo mx-auto h-32 p-4" alt="Polkadot logo" />
+          <div className="relative mb-6">
+            <img src={polkadotLogo} className="logo mx-auto h-32 p-4" alt="Polkadot logo" />
+            <div className="flex items-center justify-center gap-2">
+              <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Unlock Vested DOT</h1>
+              <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400">
+                Beta
+              </span>
+            </div>
+          </div>
           
           {pageMode === "readonly" ? (
             <ReadOnlyPage />

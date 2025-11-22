@@ -1,6 +1,7 @@
 import { ChainProvider, useLazyLoadQuery } from "@reactive-dot/react";
 import { useState } from "react";
 import { VestingGraph } from "./VestingGraph";
+import { ContactFooter } from "./ContactFooter";
 
 interface VestingSchedule {
   locked: bigint | number;
@@ -275,6 +276,8 @@ export function ReadOnlyPage() {
             </p>
           </div>
         </div>
+
+        <ContactFooter />
       </div>
     );
   }
@@ -295,6 +298,8 @@ export function ReadOnlyPage() {
         <ChainProvider chainId="polkadot">
           <RelayChainBlockFetcher onBlockFetched={setRelayChainBlock} />
         </ChainProvider>
+
+        <ContactFooter />
       </div>
     );
   }
@@ -317,6 +322,8 @@ export function ReadOnlyPage() {
           address={submittedAddress}
           relayChainBlock={relayChainBlock}
         />
+
+        <ContactFooter />
       </div>
     </ChainProvider>
   );
