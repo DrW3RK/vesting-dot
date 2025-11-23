@@ -1,5 +1,5 @@
 import { ChainProvider, useLazyLoadQuery } from "@reactive-dot/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { VestingGraph } from "./VestingGraph";
 import { ContactFooter } from "./ContactFooter";
 
@@ -72,6 +72,10 @@ function ReadOnlyAccountVesting({
   address: string;
   relayChainBlock: bigint;
 }) {
+  const [subscanData, setSubscanData] = useState<any>(null);
+  const [subscanLoading, setSubscanLoading] = useState(true);
+  const [subscanError, setSubscanError] = useState<string | null>(null);
+
   const vestingInfo = useLazyLoadQuery((builder) => 
     builder.storage("Vesting", "Vesting", [address])
   );
@@ -85,6 +89,43 @@ function ReadOnlyAccountVesting({
   const fullBalance = BigInt(freeBalance) + BigInt(reservedBalance);
 
   const hasVesting = vestingInfo && Array.isArray(vestingInfo) && vestingInfo.length > 0;
+
+  // Fetch Subscan data
+  useEffect(() => {
+    const fetchSubscanData = async () => {
+      setSubscanLoading(true);
+      setSubscanError(null);
+      
+      try {
+        const apiKey = import.meta.env.VITE_SUBSCAN_API_KEY;
+        
+        const response = await fetch('https://assethub-polkadot.api.subscan.io/api/v2/scan/search', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey || '',
+          },
+          body: JSON.stringify({
+            key: address,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Subscan API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setSubscanData(data);
+      } catch (error) {
+        console.error('Error fetching Subscan data:', error);
+        setSubscanError(error instanceof Error ? error.message : 'Failed to fetch Subscan data');
+      } finally {
+        setSubscanLoading(false);
+      }
+    };
+
+    fetchSubscanData();
+  }, [address]);
 
   if (!hasVesting) {
     return (
@@ -110,6 +151,26 @@ function ReadOnlyAccountVesting({
         </div>
         
         <div className="mt-4 text-center text-gray-600 dark:text-gray-400">No vesting schedule found</div>
+
+        {/* Subscan API Data Section */}
+        <div className="mt-6">
+          <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">Subscan API Data</h3>
+          {subscanLoading ? (
+            <div className="rounded-lg border border-gray-300 bg-gray-50 p-4 text-center dark:border-gray-600 dark:bg-gray-900/50">
+              <p className="text-gray-600 dark:text-gray-400">Loading Subscan data...</p>
+            </div>
+          ) : subscanError ? (
+            <div className="rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-700 dark:bg-red-900/20">
+              <p className="text-sm text-red-600 dark:text-red-400">Error: {subscanError}</p>
+            </div>
+          ) : (
+            <div className="overflow-auto rounded-lg border border-gray-300 bg-gray-50 p-4 dark:border-gray-600 dark:bg-gray-900/50">
+              <pre className="max-h-96 overflow-auto text-xs text-gray-900 dark:text-gray-100">
+                {JSON.stringify(subscanData, null, 2)}
+              </pre>
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -193,6 +254,26 @@ function ReadOnlyAccountVesting({
           currentRelayBlock={relayChainBlock}
         />
       )}
+
+      {/* Subscan API Data Section */}
+      <div className="mt-6">
+        <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">Subscan API Data</h3>
+        {subscanLoading ? (
+          <div className="rounded-lg border border-gray-300 bg-gray-50 p-4 text-center dark:border-gray-600 dark:bg-gray-900/50">
+            <p className="text-gray-600 dark:text-gray-400">Loading Subscan data...</p>
+          </div>
+        ) : subscanError ? (
+          <div className="rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-700 dark:bg-red-900/20">
+            <p className="text-sm text-red-600 dark:text-red-400">Error: {subscanError}</p>
+          </div>
+        ) : (
+          <div className="overflow-auto rounded-lg border border-gray-300 bg-gray-50 p-4 dark:border-gray-600 dark:bg-gray-900/50">
+            <pre className="max-h-96 overflow-auto text-xs text-gray-900 dark:text-gray-100">
+              {JSON.stringify(subscanData, null, 2)}
+            </pre>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
