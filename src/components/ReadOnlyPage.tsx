@@ -293,7 +293,7 @@ export function ReadOnlyPage() {
           ← Back to Address Input
         </button>
         
-        <h1 className="mb-2 text-4xl font-bold text-gray-900 dark:text-white">Read-Only Vesting Viewer</h1>
+        <h1 className="mb-2 text-4xl font-bold text-gray-900 dark:text-white">Vesting Schedule Viewer</h1>
         <p className="mb-8 text-gray-600 dark:text-gray-400">Loading relay chain data...</p>
         <ChainProvider chainId="polkadot">
           <RelayChainBlockFetcher onBlockFetched={setRelayChainBlock} />
