@@ -206,11 +206,51 @@ function ReadOnlyAccountVesting({
       </div>
 
       {/* Aggregate Locked Vesting Amount */}
-      <div className="mb-6">
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         <LockedVestingAmount 
           vestingInfo={vestingInfo as VestingSchedule[]} 
           relayChainBlock={relayChainBlock}
         />
+        
+        {/* Vested DOT Available for Unlock */}
+        {!subscanLoading && !subscanError && subscanData?.data?.account?.vesting?.total_locked && (
+          <div className="rounded-lg border-2 border-green-300 bg-gradient-to-br from-green-50 to-white p-5 shadow-md dark:border-green-700 dark:from-green-900/20 dark:to-gray-800/50">
+            <div className="text-sm font-semibold text-gray-600 dark:text-gray-400">Vested DOT Available for Unlock</div>
+            <div className="font-mono text-3xl font-bold text-green-600 dark:text-green-400">
+              {(() => {
+                // Calculate on-chain locked vesting
+                let totalLocked = 0n;
+                let totalUnlocked = 0n;
+                vestingInfo.forEach((schedule: VestingSchedule) => {
+                  const locked = BigInt(schedule.locked);
+                  const perBlock = BigInt(schedule.per_block);
+                  const startingBlock = BigInt(schedule.starting_block);
+                  totalLocked += locked;
+                  const blocksElapsed = relayChainBlock > startingBlock ? relayChainBlock - startingBlock : 0n;
+                  const unlocked = blocksElapsed * perBlock;
+                  if (unlocked >= locked) {
+                    totalUnlocked += locked;
+                  } else {
+                    totalUnlocked += unlocked;
+                  }
+                });
+                const onChainLocked = totalLocked - totalUnlocked;
+                
+                // Get Subscan locked value
+                const subscanLocked = BigInt(subscanData.data.account.vesting.total_locked);
+                
+                // Calculate absolute difference
+                const difference = onChainLocked > subscanLocked ? onChainLocked - subscanLocked : subscanLocked - onChainLocked;
+                const differenceInDOT = Number(difference) / 1e10;
+                
+                return `${differenceInDOT.toFixed(4)} DOT`;
+              })()}
+            </div>
+            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Ready to be unlocked
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Individual Vesting Schedules */}
