@@ -77,6 +77,10 @@ function VestOtherAccountVesting({
   relayChainBlock: bigint;
   connectedAccount: any;
 }) {
+  const [subscanData, setSubscanData] = useState<any>(null);
+  const [subscanLoading, setSubscanLoading] = useState(true);
+  const [subscanError, setSubscanError] = useState<string | null>(null);
+
   const vestingInfo = useLazyLoadQuery((builder) => 
     builder.storage("Vesting", "Vesting", [targetAddress])
   );
@@ -89,6 +93,43 @@ function VestOtherAccountVesting({
 
   // State to track if we should hide the error after timeout
   const [showError, setShowError] = useState(true);
+
+  // Fetch Subscan data
+  useEffect(() => {
+    const fetchSubscanData = async () => {
+      setSubscanLoading(true);
+      setSubscanError(null);
+      
+      try {
+        const apiKey = import.meta.env.VITE_SUBSCAN_API_KEY;
+        
+        const response = await fetch('https://assethub-polkadot.api.subscan.io/api/v2/scan/search', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-API-Key': apiKey || '',
+          },
+          body: JSON.stringify({
+            key: targetAddress,
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`Subscan API error: ${response.status}`);
+        }
+
+        const data = await response.json();
+        setSubscanData(data);
+      } catch (error) {
+        console.error('Error fetching Subscan data:', error);
+        setSubscanError(error instanceof Error ? error.message : 'Failed to fetch Subscan data');
+      } finally {
+        setSubscanLoading(false);
+      }
+    };
+
+    fetchSubscanData();
+  }, [targetAddress]);
 
   // Auto-reset error state after 3 seconds
   useEffect(() => {
@@ -214,12 +255,52 @@ function VestOtherAccountVesting({
         </p>
       </div>
 
-      {/* Aggregate Locked Vesting Amount */}
-      <div className="mb-6">
+      {/* Aggregate Locked Vesting Amount with Available to Unlock */}
+      <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
         <LockedVestingAmount 
           vestingInfo={vestingInfo as VestingSchedule[]} 
           relayChainBlock={relayChainBlock}
         />
+        
+        {/* Vested DOT Available for Unlock */}
+        {!subscanLoading && !subscanError && subscanData?.data?.account?.vesting?.total_locked && (
+          <div className="rounded-lg border-2 border-green-300 bg-gradient-to-br from-green-50 to-white p-5 shadow-md dark:border-green-700 dark:from-green-900/20 dark:to-gray-800/50">
+            <div className="text-sm font-semibold text-gray-600 dark:text-gray-400">Vested DOT Available for Unlock</div>
+            <div className="font-mono text-3xl font-bold text-green-600 dark:text-green-400">
+              {(() => {
+                // Calculate on-chain locked vesting
+                let totalLocked = 0n;
+                let totalUnlocked = 0n;
+                vestingInfo.forEach((schedule: VestingSchedule) => {
+                  const locked = BigInt(schedule.locked);
+                  const perBlock = BigInt(schedule.per_block);
+                  const startingBlock = BigInt(schedule.starting_block);
+                  totalLocked += locked;
+                  const blocksElapsed = relayChainBlock > startingBlock ? relayChainBlock - startingBlock : 0n;
+                  const unlocked = blocksElapsed * perBlock;
+                  if (unlocked >= locked) {
+                    totalUnlocked += locked;
+                  } else {
+                    totalUnlocked += unlocked;
+                  }
+                });
+                const onChainLocked = totalLocked - totalUnlocked;
+                
+                // Get Subscan locked value
+                const subscanLocked = BigInt(subscanData.data.account.vesting.total_locked);
+                
+                // Calculate absolute difference
+                const difference = onChainLocked > subscanLocked ? onChainLocked - subscanLocked : subscanLocked - onChainLocked;
+                const differenceInDOT = Number(difference) / 1e10;
+                
+                return `${differenceInDOT.toFixed(4)} DOT`;
+              })()}
+            </div>
+            <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              Ready to be unlocked
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Individual Vesting Schedules */}
