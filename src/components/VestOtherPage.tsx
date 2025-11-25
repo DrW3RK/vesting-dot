@@ -68,14 +68,41 @@ function LockedVestingAmount({
   );
 }
 
+// Helper to parse error messages for better UX
+function parseErrorMessage(error: MutationError): string {
+  const message = error.message.toLowerCase();
+  
+  // Ledger-specific errors
+  if (message.includes('rejected') || message.includes('denied') || message.includes('cancelled') || message.includes('canceled')) {
+    return "Transaction was rejected. Please try again.";
+  }
+  if (message.includes('locked') || message.includes('device')) {
+    return "Please unlock your Ledger device and try again.";
+  }
+  if (message.includes('timeout')) {
+    return "Device connection timed out. Please try again.";
+  }
+  if (message.includes('unknown_error') || message.includes('unknown error')) {
+    return "Transaction was cancelled or rejected by the wallet.";
+  }
+  if (message.includes('user rejected') || message.includes('user declined')) {
+    return "Transaction was declined. Please try again when ready.";
+  }
+  
+  // Return original if no match, but clean it up
+  return error.message || "Transaction failed. Please try again.";
+}
+
 function VestOtherAccountVesting({ 
   targetAddress,
   relayChainBlock,
-  connectedAccount
+  connectedAccount,
+  walletName
 }: { 
   targetAddress: string;
   relayChainBlock: bigint;
   connectedAccount: any;
+  walletName: string;
 }) {
   const [subscanData, setSubscanData] = useState<any>(null);
   const [subscanLoading, setSubscanLoading] = useState(true);
@@ -93,6 +120,9 @@ function VestOtherAccountVesting({
 
   // State to track if we should hide the error after timeout
   const [showError, setShowError] = useState(true);
+
+  // Check if using Ledger wallet
+  const isLedgerWallet = walletName.toLowerCase().includes('ledger');
 
   // Fetch Subscan data
   useEffect(() => {
@@ -147,6 +177,12 @@ function VestOtherAccountVesting({
   }, [vestState]);
 
   const handleUnlockVested = () => {
+    // Prevent re-submission if already successful or processing
+    if (vestState !== idle && vestState !== pending && !(vestState instanceof MutationError)) {
+      if (vestState.type === "finalized" && vestState.ok) {
+        return; // Don't re-submit on success
+      }
+    }
     submitVest();
   };
 
@@ -158,56 +194,70 @@ function VestOtherAccountVesting({
         (vestState !== idle && vestState !== pending && vestState.type === "finalized" && !vestState.ok))) {
       return { 
         text: "Unlock Vested DOT for Other", 
-        className: "border-2 border-pink-700 bg-gradient-to-r from-pink-600 to-pink-700 text-white shadow-lg hover:from-pink-700 hover:to-pink-800 hover:shadow-xl dark:border-pink-600 dark:from-pink-600 dark:to-pink-700 dark:hover:from-pink-500 dark:hover:to-pink-600", 
-        disabled: false 
+        disabled: false,
+        isSuccess: false,
+        isPending: false,
+        isError: false
       };
     }
     
     if (vestState === idle) {
       return { 
         text: "Unlock Vested DOT for Other", 
-        className: "border-2 border-pink-700 bg-gradient-to-r from-pink-600 to-pink-700 text-white shadow-lg hover:from-pink-700 hover:to-pink-800 hover:shadow-xl dark:border-pink-600 dark:from-pink-600 dark:to-pink-700 dark:hover:from-pink-500 dark:hover:to-pink-600", 
-        disabled: false 
+        disabled: false,
+        isSuccess: false,
+        isPending: false,
+        isError: false
       };
     }
     if (vestState === pending) {
       return { 
-        text: "Unlocking Vested DOT...", 
-        className: "cursor-not-allowed border-2 border-gray-500 bg-gray-500 text-white opacity-70 shadow-md dark:border-gray-600 dark:bg-gray-600", 
-        disabled: true 
+        text: isLedgerWallet ? "Check your Ledger device..." : "Waiting for approval...", 
+        disabled: true,
+        isSuccess: false,
+        isPending: true,
+        isError: false
       };
     }
     if (vestState instanceof MutationError) {
       return { 
         text: "✗ Transaction Failed", 
-        className: "border-2 border-red-700 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg dark:border-red-600 dark:from-red-600 dark:to-red-700", 
-        disabled: false 
+        disabled: true,
+        isSuccess: false,
+        isPending: false,
+        isError: true
       };
     }
     if (vestState.type === "finalized") {
       if (vestState.ok) {
         return { 
           text: "✓ Unlocked Successfully!", 
-          className: "border-2 border-green-700 bg-gradient-to-r from-green-600 to-green-700 text-white shadow-lg dark:border-green-600 dark:from-green-600 dark:to-green-700", 
-          disabled: false 
+          disabled: true,
+          isSuccess: true,
+          isPending: false,
+          isError: false
         };
       } else {
         return { 
           text: "✗ Transaction Failed", 
-          className: "border-2 border-red-700 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg dark:border-red-600 dark:from-red-600 dark:to-red-700", 
-          disabled: false 
+          disabled: true,
+          isSuccess: false,
+          isPending: false,
+          isError: true
         };
       }
     }
     return { 
       text: "Processing...", 
-      className: "cursor-not-allowed border-2 border-gray-500 bg-gray-500 text-white opacity-70 shadow-md dark:border-gray-600 dark:bg-gray-600", 
-      disabled: true 
+      disabled: true,
+      isSuccess: false,
+      isPending: false,
+      isError: false
     };
   };
 
   const buttonState = getButtonState();
-  const errorMessage = (vestState instanceof MutationError && showError) ? vestState.message : null;
+  const errorMessage = (vestState instanceof MutationError && showError) ? parseErrorMessage(vestState) : null;
 
   if (!hasVesting) {
     return (
@@ -234,10 +284,37 @@ function VestOtherAccountVesting({
         <button
           onClick={handleUnlockVested}
           disabled={buttonState.disabled}
-          className={`w-full rounded-lg px-4 py-3 font-semibold !text-white transition-all duration-200 ${buttonState.className}`}
+          style={{
+            backgroundColor: buttonState.isSuccess ? '#16a34a' : 
+                           buttonState.isError ? '#dc2626' : 
+                           buttonState.disabled ? '#6b7280' : '#db2777',
+            color: '#ffffff',
+            cursor: buttonState.disabled ? (buttonState.isSuccess ? 'default' : 'not-allowed') : 'pointer',
+            opacity: buttonState.isPending ? 0.8 : 1
+          }}
+          className="w-full rounded-lg border-2 px-4 py-3 font-semibold shadow-lg transition-all duration-200"
         >
           {buttonState.text}
         </button>
+        
+        {/* Ledger-specific prompt when pending */}
+        {buttonState.isPending && isLedgerWallet && (
+          <div className="mt-2 rounded-lg bg-blue-50 p-3 text-center dark:bg-blue-900/20">
+            <p className="text-sm text-blue-800 dark:text-blue-300">
+              📱 Please review and approve the transaction on your Ledger device
+            </p>
+          </div>
+        )}
+        
+        {/* Generic pending message for non-Ledger wallets */}
+        {buttonState.isPending && !isLedgerWallet && (
+          <div className="mt-2 rounded-lg bg-blue-50 p-3 text-center dark:bg-blue-900/20">
+            <p className="text-sm text-blue-800 dark:text-blue-300">
+              Please confirm the transaction in your wallet
+            </p>
+          </div>
+        )}
+        
         {errorMessage && (
           <div className="mt-2 text-center text-sm text-red-600 dark:text-red-400">{errorMessage}</div>
         )}
@@ -354,6 +431,16 @@ export function VestOtherPage() {
   const [submittedAddress, setSubmittedAddress] = useState<string | null>(null);
   const [relayChainBlock, setRelayChainBlock] = useState<bigint | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Get wallet name for the first account
+  const getWalletName = () => {
+    if (accounts.length > 0) {
+      const { getWalletMetadata } = require("dot-connect");
+      const walletMeta = getWalletMetadata(accounts[0].wallet);
+      return walletMeta?.name ?? accounts[0].wallet.name;
+    }
+    return "";
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -501,6 +588,7 @@ export function VestOtherPage() {
           targetAddress={submittedAddress}
           relayChainBlock={relayChainBlock}
           connectedAccount={accounts[0]} // Use first connected account as signer
+          walletName={getWalletName()}
         />
 
         <ContactFooter />

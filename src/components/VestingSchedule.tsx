@@ -72,6 +72,31 @@ function LockedVestingAmount({
   );
 }
 
+// Helper to parse error messages for better UX
+function parseErrorMessage(error: MutationError): string {
+  const message = error.message.toLowerCase();
+  
+  // Ledger-specific errors
+  if (message.includes('rejected') || message.includes('denied') || message.includes('cancelled') || message.includes('canceled')) {
+    return "Transaction was rejected. Please try again.";
+  }
+  if (message.includes('locked') || message.includes('device')) {
+    return "Please unlock your Ledger device and try again.";
+  }
+  if (message.includes('timeout')) {
+    return "Device connection timed out. Please try again.";
+  }
+  if (message.includes('unknown_error') || message.includes('unknown error')) {
+    return "Transaction was cancelled or rejected by the wallet.";
+  }
+  if (message.includes('user rejected') || message.includes('user declined')) {
+    return "Transaction was declined. Please try again when ready.";
+  }
+  
+  // Return original if no match, but clean it up
+  return error.message || "Transaction failed. Please try again.";
+}
+
 function AccountVesting({ 
   address, 
   name, 
@@ -164,11 +189,20 @@ function AccountVesting({
   const fullBalance = BigInt(freeBalance) + BigInt(reservedBalance);
 
   const handleUnlockVested = () => {
+    // Prevent re-submission if already successful or processing
+    if (vestState !== idle && vestState !== pending && !(vestState instanceof MutationError)) {
+      if (vestState.type === "finalized" && vestState.ok) {
+        return; // Don't re-submit on success
+      }
+    }
     submitVest();
   };
 
   // Check if vestingInfo is undefined or null
   const hasVesting = vestingInfo && Array.isArray(vestingInfo) && vestingInfo.length > 0;
+
+  // Check if using Ledger wallet
+  const isLedgerWallet = wallet.toLowerCase().includes('ledger');
 
   // Determine button state based on mutation state
   const getButtonState = () => {
@@ -177,30 +211,38 @@ function AccountVesting({
         (vestState !== idle && vestState !== pending && vestState.type === "finalized" && !vestState.ok))) {
       return { 
         text: "Unlock Vested DOT", 
-        className: "border-2 border-pink-700 bg-gradient-to-r from-pink-600 to-pink-700 text-white shadow-lg hover:from-pink-700 hover:to-pink-800 hover:shadow-xl dark:border-pink-600 dark:from-pink-600 dark:to-pink-700 dark:hover:from-pink-500 dark:hover:to-pink-600", 
-        disabled: false 
+        disabled: false,
+        isSuccess: false,
+        isPending: false,
+        isError: false
       };
     }
     
     if (vestState === idle) {
       return { 
         text: "Unlock Vested DOT", 
-        className: "border-2 border-pink-700 bg-gradient-to-r from-pink-600 to-pink-700 text-white shadow-lg hover:from-pink-700 hover:to-pink-800 hover:shadow-xl dark:border-pink-600 dark:from-pink-600 dark:to-pink-700 dark:hover:from-pink-500 dark:hover:to-pink-600", 
-        disabled: false 
+        disabled: false,
+        isSuccess: false,
+        isPending: false,
+        isError: false
       };
     }
     if (vestState === pending) {
       return { 
-        text: "Unlocking Vested DOT...", 
-        className: "cursor-not-allowed border-2 border-gray-500 bg-gray-500 text-white opacity-70 shadow-md dark:border-gray-600 dark:bg-gray-600", 
-        disabled: true 
+        text: isLedgerWallet ? "Check your Ledger device..." : "Waiting for approval...", 
+        disabled: true,
+        isSuccess: false,
+        isPending: true,
+        isError: false
       };
     }
     if (vestState instanceof MutationError) {
       return { 
         text: "✗ Transaction Failed", 
-        className: "border-2 border-red-700 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg dark:border-red-600 dark:from-red-600 dark:to-red-700", 
-        disabled: false 
+        disabled: true,
+        isSuccess: false,
+        isPending: false,
+        isError: true
       };
     }
     // Transaction event states
@@ -208,27 +250,33 @@ function AccountVesting({
       if (vestState.ok) {
         return { 
           text: "✓ Unlocked Successfully!", 
-          className: "border-2 border-green-700 bg-gradient-to-r from-green-600 to-green-700 text-white shadow-lg dark:border-green-600 dark:from-green-600 dark:to-green-700", 
-          disabled: false 
+          disabled: true,
+          isSuccess: true,
+          isPending: false,
+          isError: false
         };
       } else {
         return { 
           text: "✗ Transaction Failed", 
-          className: "border-2 border-red-700 bg-gradient-to-r from-red-600 to-red-700 text-white shadow-lg dark:border-red-600 dark:from-red-600 dark:to-red-700", 
-          disabled: false 
+          disabled: true,
+          isSuccess: false,
+          isPending: false,
+          isError: true
         };
       }
     }
     // Other states like "broadcasted", "txBestBlocksState"
     return { 
       text: "Processing...", 
-      className: "cursor-not-allowed border-2 border-gray-500 bg-gray-500 text-white opacity-70 shadow-md dark:border-gray-600 dark:bg-gray-600", 
-      disabled: true 
+      disabled: true,
+      isSuccess: false,
+      isPending: false,
+      isError: false
     };
   };
 
   const buttonState = getButtonState();
-  const errorMessage = (vestState instanceof MutationError && showError) ? vestState.message : null;
+  const errorMessage = (vestState instanceof MutationError && showError) ? parseErrorMessage(vestState) : null;
 
   if (!hasVesting) {
     return (
@@ -291,10 +339,37 @@ function AccountVesting({
         <button
           onClick={handleUnlockVested}
           disabled={buttonState.disabled}
-          className={`w-full rounded-lg px-4 py-3 font-semibold !text-white transition-all duration-200 ${buttonState.className}`}
+          style={{
+            backgroundColor: buttonState.isSuccess ? '#16a34a' : 
+                           buttonState.isError ? '#dc2626' : 
+                           buttonState.disabled ? '#6b7280' : '#db2777',
+            color: '#ffffff',
+            cursor: buttonState.disabled ? (buttonState.isSuccess ? 'default' : 'not-allowed') : 'pointer',
+            opacity: buttonState.isPending ? 0.8 : 1
+          }}
+          className="w-full rounded-lg border-2 px-4 py-3 font-semibold shadow-lg transition-all duration-200"
         >
           {buttonState.text}
         </button>
+        
+        {/* Ledger-specific prompt when pending */}
+        {buttonState.isPending && isLedgerWallet && (
+          <div className="mt-2 rounded-lg bg-blue-50 p-3 text-center dark:bg-blue-900/20">
+            <p className="text-sm text-blue-800 dark:text-blue-300">
+              📱 Please review and approve the transaction on your Ledger device
+            </p>
+          </div>
+        )}
+        
+        {/* Generic pending message for non-Ledger wallets */}
+        {buttonState.isPending && !isLedgerWallet && (
+          <div className="mt-2 rounded-lg bg-blue-50 p-3 text-center dark:bg-blue-900/20">
+            <p className="text-sm text-blue-800 dark:text-blue-300">
+              Please confirm the transaction in your wallet
+            </p>
+          </div>
+        )}
+        
         {errorMessage && (
           <div className="mt-2 text-center text-sm text-red-600 dark:text-red-400">{errorMessage}</div>
         )}

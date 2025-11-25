@@ -38,6 +38,7 @@ h1 {
   line-height: 1.1;
 }
 
+/* Base button styles - but don't override color when inline styles are used */
 button {
   border-radius: 8px;
   border: 1px solid transparent;
@@ -45,11 +46,16 @@ button {
   font-size: 1em;
   font-weight: 500;
   font-family: inherit;
-  color: #f9f9f9;
-  background-color: #1a1a1a;
   cursor: pointer;
   transition: border-color 0.25s;
 }
+
+/* Only apply default colors to buttons without inline styles */
+button:not([style*="background-color"]) {
+  color: #f9f9f9;
+  background-color: #1a1a1a;
+}
+
 button:hover {
   border-color: #646cff;
 }
@@ -66,12 +72,13 @@ button:focus-visible {
   a:hover {
     color: #4c51bf;
   }
-  button {
+  /* Only apply light mode colors to buttons without inline styles */
+  button:not([style*="background-color"]) {
     color: #1a202c;
     background-color: #ffffff;
     border: 1px solid #e2e8f0;
   }
-  button:hover {
+  button:not([style*="background-color"]):hover {
     background-color: #f7fafc;
     border-color: #4c51bf;
   }
