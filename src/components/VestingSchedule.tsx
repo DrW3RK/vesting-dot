@@ -1,7 +1,7 @@
 import { ChainProvider, useAccounts, useLazyLoadQuery, useMutation } from "@reactive-dot/react";
 import { idle, MutationError, pending } from "@reactive-dot/core";
 import { getWalletMetadata } from "dot-connect";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { VestingGraph } from "./VestingGraph";
 import { ContactFooter } from "./ContactFooter";
 
@@ -113,6 +113,10 @@ function AccountVesting({
   const [subscanData, setSubscanData] = useState<any>(null);
   const [subscanLoading, setSubscanLoading] = useState(true);
   const [subscanError, setSubscanError] = useState<string | null>(null);
+  const [vestSuccessful, setVestSuccessful] = useState(false);
+  const [refreshedFreeBalance, setRefreshedFreeBalance] = useState<bigint | null>(null);
+  const [refreshedFullBalance, setRefreshedFullBalance] = useState<bigint | null>(null);
+  const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
 
   const vestingInfo = useLazyLoadQuery((builder) => 
     builder.storage("Vesting", "Vesting", [address])
@@ -130,6 +134,44 @@ function AccountVesting({
 
   // State to track if we should hide the error after timeout
   const [showError, setShowError] = useState(true);
+
+  // Function to refresh balance from Subscan API
+  const refreshBalance = useCallback(async () => {
+    setIsRefreshingBalance(true);
+    try {
+      const apiKey = import.meta.env.VITE_SUBSCAN_API_KEY;
+      
+      // Wait a bit for the chain to update
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const response = await fetch('https://assethub-polkadot.api.subscan.io/api/v2/scan/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey || '',
+        },
+        body: JSON.stringify({
+          key: address,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data?.data?.account?.balance) {
+          const freeBalance = BigInt(data.data.account.balance || 0);
+          const reservedBalance = BigInt(data.data.account.balance_lock || 0);
+          setRefreshedFreeBalance(freeBalance);
+          setRefreshedFullBalance(freeBalance + reservedBalance);
+        }
+        // Also update subscan data
+        setSubscanData(data);
+      }
+    } catch (error) {
+      console.error('Error refreshing balance:', error);
+    } finally {
+      setIsRefreshingBalance(false);
+    }
+  }, [address]);
 
   // Fetch Subscan data
   useEffect(() => {
@@ -168,6 +210,16 @@ function AccountVesting({
     fetchSubscanData();
   }, [address]);
 
+  // Track successful vest and refresh balance
+  useEffect(() => {
+    if (vestState !== idle && vestState !== pending && !(vestState instanceof MutationError)) {
+      if (vestState.type === "finalized" && vestState.ok) {
+        setVestSuccessful(true);
+        refreshBalance();
+      }
+    }
+  }, [vestState, refreshBalance]);
+
   // Auto-reset error state after 3 seconds
   useEffect(() => {
     if (vestState instanceof MutationError || 
@@ -183,10 +235,13 @@ function AccountVesting({
     }
   }, [vestState]);
 
-  // Extract balance information
-  const freeBalance = accountInfo?.data?.free || 0n;
-  const reservedBalance = accountInfo?.data?.reserved || 0n;
-  const fullBalance = BigInt(freeBalance) + BigInt(reservedBalance);
+  // Extract balance information - use refreshed values if available
+  const initialFreeBalance = accountInfo?.data?.free || 0n;
+  const initialReservedBalance = accountInfo?.data?.reserved || 0n;
+  const initialFullBalance = BigInt(initialFreeBalance) + BigInt(initialReservedBalance);
+
+  const freeBalance = refreshedFreeBalance !== null ? refreshedFreeBalance : BigInt(initialFreeBalance);
+  const fullBalance = refreshedFullBalance !== null ? refreshedFullBalance : initialFullBalance;
 
   const handleUnlockVested = () => {
     // Prevent re-submission if already successful or processing
@@ -321,13 +376,19 @@ function AccountVesting({
       {/* Balance Information */}
       <div className="mb-6 grid grid-cols-2 gap-4">
         <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-          <div className="text-xs text-gray-600 dark:text-gray-400">Full Balance</div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">
+            Full Balance
+            {isRefreshingBalance && <span className="ml-2 text-blue-500">⟳</span>}
+          </div>
           <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
             {(Number(fullBalance) / 1e10).toFixed(4)} DOT
           </div>
         </div>
         <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-          <div className="text-xs text-gray-600 dark:text-gray-400">Free Balance</div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">
+            Free Balance
+            {isRefreshingBalance && <span className="ml-2 text-blue-500">⟳</span>}
+          </div>
           <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
             {(Number(freeBalance) / 1e10).toFixed(4)} DOT
           </div>
@@ -390,39 +451,46 @@ function AccountVesting({
         {/* Vested DOT Available for Unlock */}
         {!subscanLoading && !subscanError && subscanData?.data?.account?.vesting?.total_locked && (
           <div className="rounded-lg border-2 border-green-300 bg-gradient-to-br from-green-50 to-white p-5 shadow-md dark:border-green-700 dark:from-green-900/20 dark:to-gray-800/50">
-            <div className="text-sm font-semibold text-gray-600 dark:text-gray-400">Vested DOT Available for Unlock</div>
+            <div className="text-sm font-semibold text-gray-600 dark:text-gray-400">
+              Vested DOT Available for Unlock
+              {isRefreshingBalance && <span className="ml-2 text-blue-500">⟳</span>}
+            </div>
             <div className="font-mono text-3xl font-bold text-green-600 dark:text-green-400">
-              {(() => {
-                // Calculate on-chain locked vesting
-                let totalLocked = 0n;
-                let totalUnlocked = 0n;
-                vestingInfo.forEach((schedule: VestingSchedule) => {
-                  const locked = BigInt(schedule.locked);
-                  const perBlock = BigInt(schedule.per_block);
-                  const startingBlock = BigInt(schedule.starting_block);
-                  totalLocked += locked;
-                  const blocksElapsed = relayChainBlock > startingBlock ? relayChainBlock - startingBlock : 0n;
-                  const unlocked = blocksElapsed * perBlock;
-                  if (unlocked >= locked) {
-                    totalUnlocked += locked;
-                  } else {
-                    totalUnlocked += unlocked;
-                  }
-                });
-                const onChainLocked = totalLocked - totalUnlocked;
-                
-                // Get Subscan locked value
-                const subscanLocked = BigInt(subscanData.data.account.vesting.total_locked);
-                
-                // Calculate absolute difference
-                const difference = onChainLocked > subscanLocked ? onChainLocked - subscanLocked : subscanLocked - onChainLocked;
-                const differenceInDOT = Number(difference) / 1e10;
-                
-                return `${differenceInDOT.toFixed(4)} DOT`;
-              })()}
+              {vestSuccessful ? (
+                "0.0000 DOT"
+              ) : (
+                (() => {
+                  // Calculate on-chain locked vesting
+                  let totalLocked = 0n;
+                  let totalUnlocked = 0n;
+                  vestingInfo.forEach((schedule: VestingSchedule) => {
+                    const locked = BigInt(schedule.locked);
+                    const perBlock = BigInt(schedule.per_block);
+                    const startingBlock = BigInt(schedule.starting_block);
+                    totalLocked += locked;
+                    const blocksElapsed = relayChainBlock > startingBlock ? relayChainBlock - startingBlock : 0n;
+                    const unlocked = blocksElapsed * perBlock;
+                    if (unlocked >= locked) {
+                      totalUnlocked += locked;
+                    } else {
+                      totalUnlocked += unlocked;
+                    }
+                  });
+                  const onChainLocked = totalLocked - totalUnlocked;
+                  
+                  // Get Subscan locked value
+                  const subscanLocked = BigInt(subscanData.data.account.vesting.total_locked);
+                  
+                  // Calculate absolute difference
+                  const difference = onChainLocked > subscanLocked ? onChainLocked - subscanLocked : subscanLocked - onChainLocked;
+                  const differenceInDOT = Number(difference) / 1e10;
+                  
+                  return `${differenceInDOT.toFixed(4)} DOT`;
+                })()
+              )}
             </div>
             <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Ready to be unlocked
+              {vestSuccessful ? "Successfully unlocked!" : "Ready to be unlocked"}
             </div>
           </div>
         )}

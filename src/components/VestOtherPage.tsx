@@ -1,6 +1,7 @@
 import { ChainProvider, useAccounts, useLazyLoadQuery, useMutation } from "@reactive-dot/react";
 import { idle, MutationError, pending } from "@reactive-dot/core";
-import { useState, useEffect } from "react";
+import { getWalletMetadata } from "dot-connect";
+import { useState, useEffect, useCallback } from "react";
 import { VestingGraph } from "./VestingGraph";
 import { ContactFooter } from "./ContactFooter";
 
@@ -107,6 +108,8 @@ function VestOtherAccountVesting({
   const [subscanData, setSubscanData] = useState<any>(null);
   const [subscanLoading, setSubscanLoading] = useState(true);
   const [subscanError, setSubscanError] = useState<string | null>(null);
+  const [vestSuccessful, setVestSuccessful] = useState(false);
+  const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
 
   const vestingInfo = useLazyLoadQuery((builder) => 
     builder.storage("Vesting", "Vesting", [targetAddress])
@@ -123,6 +126,37 @@ function VestOtherAccountVesting({
 
   // Check if using Ledger wallet
   const isLedgerWallet = walletName.toLowerCase().includes('ledger');
+
+  // Function to refresh data from Subscan API
+  const refreshData = useCallback(async () => {
+    setIsRefreshingBalance(true);
+    try {
+      const apiKey = import.meta.env.VITE_SUBSCAN_API_KEY;
+      
+      // Wait a bit for the chain to update
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      const response = await fetch('https://assethub-polkadot.api.subscan.io/api/v2/scan/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-API-Key': apiKey || '',
+        },
+        body: JSON.stringify({
+          key: targetAddress,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setSubscanData(data);
+      }
+    } catch (error) {
+      console.error('Error refreshing data:', error);
+    } finally {
+      setIsRefreshingBalance(false);
+    }
+  }, [targetAddress]);
 
   // Fetch Subscan data
   useEffect(() => {
@@ -160,6 +194,16 @@ function VestOtherAccountVesting({
 
     fetchSubscanData();
   }, [targetAddress]);
+
+  // Track successful vest and refresh data
+  useEffect(() => {
+    if (vestState !== idle && vestState !== pending && !(vestState instanceof MutationError)) {
+      if (vestState.type === "finalized" && vestState.ok) {
+        setVestSuccessful(true);
+        refreshData();
+      }
+    }
+  }, [vestState, refreshData]);
 
   // Auto-reset error state after 3 seconds
   useEffect(() => {
@@ -342,39 +386,46 @@ function VestOtherAccountVesting({
         {/* Vested DOT Available for Unlock */}
         {!subscanLoading && !subscanError && subscanData?.data?.account?.vesting?.total_locked && (
           <div className="rounded-lg border-2 border-green-300 bg-gradient-to-br from-green-50 to-white p-5 shadow-md dark:border-green-700 dark:from-green-900/20 dark:to-gray-800/50">
-            <div className="text-sm font-semibold text-gray-600 dark:text-gray-400">Vested DOT Available for Unlock</div>
+            <div className="text-sm font-semibold text-gray-600 dark:text-gray-400">
+              Vested DOT Available for Unlock
+              {isRefreshingBalance && <span className="ml-2 text-blue-500">⟳</span>}
+            </div>
             <div className="font-mono text-3xl font-bold text-green-600 dark:text-green-400">
-              {(() => {
-                // Calculate on-chain locked vesting
-                let totalLocked = 0n;
-                let totalUnlocked = 0n;
-                vestingInfo.forEach((schedule: VestingSchedule) => {
-                  const locked = BigInt(schedule.locked);
-                  const perBlock = BigInt(schedule.per_block);
-                  const startingBlock = BigInt(schedule.starting_block);
-                  totalLocked += locked;
-                  const blocksElapsed = relayChainBlock > startingBlock ? relayChainBlock - startingBlock : 0n;
-                  const unlocked = blocksElapsed * perBlock;
-                  if (unlocked >= locked) {
-                    totalUnlocked += locked;
-                  } else {
-                    totalUnlocked += unlocked;
-                  }
-                });
-                const onChainLocked = totalLocked - totalUnlocked;
-                
-                // Get Subscan locked value
-                const subscanLocked = BigInt(subscanData.data.account.vesting.total_locked);
-                
-                // Calculate absolute difference
-                const difference = onChainLocked > subscanLocked ? onChainLocked - subscanLocked : subscanLocked - onChainLocked;
-                const differenceInDOT = Number(difference) / 1e10;
-                
-                return `${differenceInDOT.toFixed(4)} DOT`;
-              })()}
+              {vestSuccessful ? (
+                "0.0000 DOT"
+              ) : (
+                (() => {
+                  // Calculate on-chain locked vesting
+                  let totalLocked = 0n;
+                  let totalUnlocked = 0n;
+                  vestingInfo.forEach((schedule: VestingSchedule) => {
+                    const locked = BigInt(schedule.locked);
+                    const perBlock = BigInt(schedule.per_block);
+                    const startingBlock = BigInt(schedule.starting_block);
+                    totalLocked += locked;
+                    const blocksElapsed = relayChainBlock > startingBlock ? relayChainBlock - startingBlock : 0n;
+                    const unlocked = blocksElapsed * perBlock;
+                    if (unlocked >= locked) {
+                      totalUnlocked += locked;
+                    } else {
+                      totalUnlocked += unlocked;
+                    }
+                  });
+                  const onChainLocked = totalLocked - totalUnlocked;
+                  
+                  // Get Subscan locked value
+                  const subscanLocked = BigInt(subscanData.data.account.vesting.total_locked);
+                  
+                  // Calculate absolute difference
+                  const difference = onChainLocked > subscanLocked ? onChainLocked - subscanLocked : subscanLocked - onChainLocked;
+                  const differenceInDOT = Number(difference) / 1e10;
+                  
+                  return `${differenceInDOT.toFixed(4)} DOT`;
+                })()
+              )}
             </div>
             <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-              Ready to be unlocked
+              {vestSuccessful ? "Successfully unlocked!" : "Ready to be unlocked"}
             </div>
           </div>
         )}
@@ -435,7 +486,6 @@ export function VestOtherPage() {
   // Get wallet name for the first account
   const getWalletName = () => {
     if (accounts.length > 0) {
-      const { getWalletMetadata } = require("dot-connect");
       const walletMeta = getWalletMetadata(accounts[0].wallet);
       return walletMeta?.name ?? accounts[0].wallet.name;
     }
