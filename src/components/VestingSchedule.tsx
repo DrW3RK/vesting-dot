@@ -114,16 +114,10 @@ function AccountVesting({
   const [subscanLoading, setSubscanLoading] = useState(true);
   const [subscanError, setSubscanError] = useState<string | null>(null);
   const [vestSuccessful, setVestSuccessful] = useState(false);
-  const [refreshedFreeBalance, setRefreshedFreeBalance] = useState<bigint | null>(null);
-  const [refreshedFullBalance, setRefreshedFullBalance] = useState<bigint | null>(null);
   const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
 
   const vestingInfo = useLazyLoadQuery((builder) => 
     builder.storage("Vesting", "Vesting", [address])
-  );
-
-  const accountInfo = useLazyLoadQuery((builder) =>
-    builder.storage("System", "Account", [address])
   );
 
   // Use mutation with signer from account
@@ -134,6 +128,19 @@ function AccountVesting({
 
   // State to track if we should hide the error after timeout
   const [showError, setShowError] = useState(true);
+
+  // Calculate balances from Subscan API data
+  const getBalancesFromSubscan = () => {
+    if (!subscanData?.data?.account) {
+      return { fullBalance: 0, freeBalance: 0 };
+    }
+    const balance = parseFloat(subscanData.data.account.balance || "0");
+    const balanceLock = parseFloat(subscanData.data.account.balance_lock || "0");
+    const freeBalance = balance - balanceLock;
+    return { fullBalance: balance, freeBalance };
+  };
+
+  const { fullBalance, freeBalance } = getBalancesFromSubscan();
 
   // Function to refresh balance from Subscan API
   const refreshBalance = useCallback(async () => {
@@ -157,13 +164,6 @@ function AccountVesting({
 
       if (response.ok) {
         const data = await response.json();
-        if (data?.data?.account?.balance) {
-          const freeBalance = BigInt(data.data.account.balance || 0);
-          const reservedBalance = BigInt(data.data.account.balance_lock || 0);
-          setRefreshedFreeBalance(freeBalance);
-          setRefreshedFullBalance(freeBalance + reservedBalance);
-        }
-        // Also update subscan data
         setSubscanData(data);
       }
     } catch (error) {
@@ -234,14 +234,6 @@ function AccountVesting({
       setShowError(true);
     }
   }, [vestState]);
-
-  // Extract balance information - use refreshed values if available
-  const initialFreeBalance = accountInfo?.data?.free || 0n;
-  const initialReservedBalance = accountInfo?.data?.reserved || 0n;
-  const initialFullBalance = BigInt(initialFreeBalance) + BigInt(initialReservedBalance);
-
-  const freeBalance = refreshedFreeBalance !== null ? refreshedFreeBalance : BigInt(initialFreeBalance);
-  const fullBalance = refreshedFullBalance !== null ? refreshedFullBalance : initialFullBalance;
 
   const handleUnlockVested = () => {
     // Prevent re-submission if already successful or processing
@@ -347,15 +339,21 @@ function AccountVesting({
         {/* Show balances even if no vesting */}
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-            <div className="text-xs text-gray-600 dark:text-gray-400">Full Balance</div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">
+              Full Balance
+              {subscanLoading && <span className="ml-2 text-blue-500">⟳</span>}
+            </div>
             <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-              {(Number(fullBalance) / 1e10).toFixed(4)} DOT
+              {subscanLoading ? "Loading..." : `${fullBalance.toFixed(4)} DOT`}
             </div>
           </div>
           <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-            <div className="text-xs text-gray-600 dark:text-gray-400">Free Balance</div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">
+              Free Balance
+              {subscanLoading && <span className="ml-2 text-blue-500">⟳</span>}
+            </div>
             <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-              {(Number(freeBalance) / 1e10).toFixed(4)} DOT
+              {subscanLoading ? "Loading..." : `${freeBalance.toFixed(4)} DOT`}
             </div>
           </div>
         </div>
@@ -378,19 +376,19 @@ function AccountVesting({
         <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
           <div className="text-xs text-gray-600 dark:text-gray-400">
             Full Balance
-            {isRefreshingBalance && <span className="ml-2 text-blue-500">⟳</span>}
+            {(subscanLoading || isRefreshingBalance) && <span className="ml-2 text-blue-500">⟳</span>}
           </div>
           <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-            {(Number(fullBalance) / 1e10).toFixed(4)} DOT
+            {subscanLoading ? "Loading..." : `${fullBalance.toFixed(4)} DOT`}
           </div>
         </div>
         <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
           <div className="text-xs text-gray-600 dark:text-gray-400">
             Free Balance
-            {isRefreshingBalance && <span className="ml-2 text-blue-500">⟳</span>}
+            {(subscanLoading || isRefreshingBalance) && <span className="ml-2 text-blue-500">⟳</span>}
           </div>
           <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-            {(Number(freeBalance) / 1e10).toFixed(4)} DOT
+            {subscanLoading ? "Loading..." : `${freeBalance.toFixed(4)} DOT`}
           </div>
         </div>
       </div>

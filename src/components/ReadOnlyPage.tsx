@@ -80,13 +80,18 @@ function ReadOnlyAccountVesting({
     builder.storage("Vesting", "Vesting", [address])
   );
 
-  const accountInfo = useLazyLoadQuery((builder) =>
-    builder.storage("System", "Account", [address])
-  );
+  // Calculate balances from Subscan API data
+  const getBalancesFromSubscan = () => {
+    if (!subscanData?.data?.account) {
+      return { fullBalance: 0, freeBalance: 0 };
+    }
+    const balance = parseFloat(subscanData.data.account.balance || "0");
+    const balanceLock = parseFloat(subscanData.data.account.balance_lock || "0");
+    const freeBalance = balance - balanceLock;
+    return { fullBalance: balance, freeBalance };
+  };
 
-  const freeBalance = accountInfo?.data?.free || 0n;
-  const reservedBalance = accountInfo?.data?.reserved || 0n;
-  const fullBalance = BigInt(freeBalance) + BigInt(reservedBalance);
+  const { fullBalance, freeBalance } = getBalancesFromSubscan();
 
   const hasVesting = vestingInfo && Array.isArray(vestingInfo) && vestingInfo.length > 0;
 
@@ -137,15 +142,21 @@ function ReadOnlyAccountVesting({
         
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-            <div className="text-xs text-gray-600 dark:text-gray-400">Full Balance</div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">
+              Full Balance
+              {subscanLoading && <span className="ml-2 text-blue-500">⟳</span>}
+            </div>
             <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-              {(Number(fullBalance) / 1e10).toFixed(4)} DOT
+              {subscanLoading ? "Loading..." : `${fullBalance.toFixed(4)} DOT`}
             </div>
           </div>
           <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-            <div className="text-xs text-gray-600 dark:text-gray-400">Free Balance</div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">
+              Free Balance
+              {subscanLoading && <span className="ml-2 text-blue-500">⟳</span>}
+            </div>
             <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-              {(Number(freeBalance) / 1e10).toFixed(4)} DOT
+              {subscanLoading ? "Loading..." : `${freeBalance.toFixed(4)} DOT`}
             </div>
           </div>
         </div>
@@ -185,15 +196,21 @@ function ReadOnlyAccountVesting({
       {/* Balance Information */}
       <div className="mb-6 grid grid-cols-2 gap-4">
         <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-          <div className="text-xs text-gray-600 dark:text-gray-400">Full Balance</div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">
+            Full Balance
+            {subscanLoading && <span className="ml-2 text-blue-500">⟳</span>}
+          </div>
           <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-            {(Number(fullBalance) / 1e10).toFixed(4)} DOT
+            {subscanLoading ? "Loading..." : `${fullBalance.toFixed(4)} DOT`}
           </div>
         </div>
         <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-          <div className="text-xs text-gray-600 dark:text-gray-400">Free Balance</div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">
+            Free Balance
+            {subscanLoading && <span className="ml-2 text-blue-500">⟳</span>}
+          </div>
           <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-            {(Number(freeBalance) / 1e10).toFixed(4)} DOT
+            {subscanLoading ? "Loading..." : `${freeBalance.toFixed(4)} DOT`}
           </div>
         </div>
       </div>
