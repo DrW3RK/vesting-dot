@@ -1,6 +1,6 @@
 import { ChainProvider, ReactiveDotProvider } from "@reactive-dot/react";
 import { ConnectionButton } from "dot-connect/react.js";
-import { Suspense, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 
 import "./App.css";
 import polkadotLogo from "./assets/polkadot-logo.svg";
@@ -8,15 +8,19 @@ import Loading from "./components/Loading";
 import { VestingSchedule } from "./components/VestingSchedule";
 import { ReadOnlyPage } from "./components/ReadOnlyPage";
 import { VestOtherPage } from "./components/VestOtherPage";
-import { config } from "./reactive-dot";
+import { RpcEndpointSelector, DEFAULT_RPC_ENDPOINT } from "./components/RpcEndpointSelector";
+import { createConfig } from "./reactive-dot";
 
 type PageMode = "wallet" | "readonly" | "vestother";
 
 function App() {
   const [pageMode, setPageMode] = useState<PageMode>("readonly");
+  const [rpcEndpoint, setRpcEndpoint] = useState<string>(DEFAULT_RPC_ENDPOINT);
+
+  const config = useMemo(() => createConfig(rpcEndpoint), [rpcEndpoint]);
 
   return (
-    <ReactiveDotProvider config={config}>
+    <ReactiveDotProvider config={config} key={rpcEndpoint}>
       <ChainProvider chainId="polkadot_asset_hub">
         {/* Navigation tabs */}
         <div className="fixed left-10 top-10 z-50">
@@ -52,6 +56,14 @@ function App() {
               🎁 Vest Other
             </button>
           </div>
+        </div>
+
+        {/* RPC Endpoint Selector */}
+        <div className="fixed left-10 top-24 z-50">
+          <RpcEndpointSelector
+            selectedEndpoint={rpcEndpoint}
+            onEndpointChange={setRpcEndpoint}
+          />
         </div>
 
         {/* Wallet control (show in wallet and vestother modes) */}
