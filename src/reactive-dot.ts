@@ -6,6 +6,39 @@ import { LedgerWallet } from "@reactive-dot/wallet-ledger";
 // import { WalletConnect } from "@reactive-dot/wallet-walletconnect";
 import { registerDotConnect } from "dot-connect";
 
+/**
+ * Creates a WebSocket provider that tries multiple RPC endpoints sequentially
+ * until a successful connection is established.
+ *
+ * @param endpoints - Array of RPC endpoint URLs to try in order
+ * @returns A provider function that attempts each endpoint until one succeeds
+ */
+const createFallbackWsProvider = (endpoints: string[]) => {
+  let currentEndpointIndex = 0;
+
+  return async () => {
+    let lastError: Error | undefined;
+
+    for (let i = 0; i < endpoints.length; i++) {
+      const endpoint = endpoints[(currentEndpointIndex + i) % endpoints.length];
+      try {
+        const provider = getWsProvider(endpoint);
+        const connection = await provider();
+        console.log(`Successfully connected to ${endpoint}`);
+        currentEndpointIndex = (currentEndpointIndex + i) % endpoints.length;
+        return connection;
+      } catch (error) {
+        console.warn(`Failed to connect to ${endpoint}:`, error);
+        lastError = error as Error;
+      }
+    }
+
+    throw new Error(
+      `Failed to connect to any RPC endpoint. Last error: ${lastError?.message}`
+    );
+  };
+};
+
 export const config = defineConfig({
   chains: {
     polkadot: {
@@ -14,7 +47,11 @@ export const config = defineConfig({
     },
     polkadot_asset_hub: {
       descriptor: polkadot_asset_hub,
-      provider: getWsProvider("wss://polkadot-asset-hub-rpc.polkadot.io"),
+      provider: createFallbackWsProvider([
+        "wss://sys.ibp.network/asset-hub-polkadot",
+        "wss://asset-hub-polkadot.dotters.network",
+        "wss://polkadot-asset-hub-rpc.polkadot.io",
+      ]),
     },
   },
   wallets: [
