@@ -32,7 +32,7 @@ const wallets = [
   //    "polkadot:e143f23803ac50e8f6f8e62695d1ce9e" // Westend
   //  ]
   //})
-];
+] as const;
 
 export function createConfig(assetHubEndpoint: string) {
   return defineConfig({
@@ -46,7 +46,7 @@ export function createConfig(assetHubEndpoint: string) {
         provider: getWsProvider(assetHubEndpoint),
       },
     },
-    wallets,
+    wallets: wallets as any,
   });
 }
 
