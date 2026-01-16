@@ -5,6 +5,7 @@ import { InjectedWalletProvider } from "@reactive-dot/core/wallets.js";
 import { LedgerWallet } from "@reactive-dot/wallet-ledger";
 // import { WalletConnect } from "@reactive-dot/wallet-walletconnect";
 import { registerDotConnect } from "dot-connect";
+import { getFallbackProvider } from "./utils/fallback-provider";
 
 export const config = defineConfig({
   chains: {
@@ -14,7 +15,14 @@ export const config = defineConfig({
     },
     polkadot_asset_hub: {
       descriptor: polkadot_asset_hub,
-      provider: getWsProvider("wss://dot-rpc.stakeworld.io/assethub"),
+      provider: getFallbackProvider([
+        "wss://dot-rpc.stakeworld.io/assethub",
+        "wss://sys.ibp.network/asset-hub-polkadot",
+        "wss://asset-hub-polkadot.dotters.network",
+        "wss://polkadot-asset-hub-rpc.polkadot.io",
+        "wss://statemint.public.curie.radiumblock.co/ws",
+        "wss://rpc-asset-hub-polkadot.luckyfriday.io",
+      ]),
     },
   },
   wallets: [
