@@ -14,7 +14,7 @@ export const config = defineConfig({
     },
     polkadot_asset_hub: {
       descriptor: polkadot_asset_hub,
-      provider: getWsProvider("wss://polkadot-asset-hub-rpc.polkadot.io"),
+      provider: getWsProvider("wss://dot-rpc.stakeworld.io/assethub"),
     },
   },
   wallets: [
