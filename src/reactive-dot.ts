@@ -1,5 +1,4 @@
 import { polkadot, polkadot_asset_hub} from "@polkadot-api/descriptors";
-import { getWsProvider } from "@polkadot-api/ws-provider/web";
 import { defineConfig } from "@reactive-dot/core";
 import { InjectedWalletProvider } from "@reactive-dot/core/wallets.js";
 import { LedgerWallet } from "@reactive-dot/wallet-ledger";
@@ -11,7 +10,12 @@ export const config = defineConfig({
   chains: {
     polkadot: {
       descriptor: polkadot,
-      provider: getWsProvider("wss://rpc.polkadot.io"),
+      provider: getFallbackProvider([
+        "wss://rpc.polkadot.io",
+        "wss://polkadot.public.curie.radiumblock.co/ws",
+        "wss://polkadot.api.onfinality.io/public-ws",
+        "wss://rpc.ibp.network/polkadot",
+      ]),
     },
     polkadot_asset_hub: {
       descriptor: polkadot_asset_hub,
