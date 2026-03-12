@@ -1,5 +1,5 @@
 import { ChainProvider, useLazyLoadQuery } from "@reactive-dot/react";
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { VestingGraph } from "./VestingGraph";
 import { ContactFooter } from "./ContactFooter";
 
@@ -72,65 +72,39 @@ function ReadOnlyAccountVesting({
   address: string;
   relayChainBlock: bigint;
 }) {
-  const [subscanData, setSubscanData] = useState<any>(null);
-  const [subscanLoading, setSubscanLoading] = useState(true);
-  const [subscanError, setSubscanError] = useState<string | null>(null);
-
-  const vestingInfo = useLazyLoadQuery((builder) => 
+  const vestingInfo = useLazyLoadQuery((builder) =>
     builder.storage("Vesting", "Vesting", [address])
   );
 
-  // Calculate balances from Subscan API data
-  const getBalancesFromSubscan = () => {
-    if (!subscanData?.data?.account) {
-      return { fullBalance: 0, freeBalance: 0 };
-    }
-    const balance = parseFloat(subscanData.data.account.balance || "0");
-    const balanceLock = parseFloat(subscanData.data.account.balance_lock || "0");
-    const freeBalance = balance - balanceLock;
-    return { fullBalance: balance, freeBalance };
-  };
+  const accountInfo = useLazyLoadQuery((builder) =>
+    builder.storage("System", "Account", [address])
+  );
 
-  const { fullBalance, freeBalance } = getBalancesFromSubscan();
+  // Balance calculations from on-chain data
+  const free = (accountInfo as any)?.data?.free ?? 0n;
+  const frozen = (accountInfo as any)?.data?.frozen ?? 0n;
+  const fullBalance = Number(free) / 1e10;
+  const freeBalance = Number(free - (frozen < free ? frozen : free)) / 1e10;
 
   const hasVesting = vestingInfo && Array.isArray(vestingInfo) && vestingInfo.length > 0;
 
-  // Fetch Subscan data
-  useEffect(() => {
-    const fetchSubscanData = async () => {
-      setSubscanLoading(true);
-      setSubscanError(null);
-      
-      try {
-        const apiKey = import.meta.env.VITE_SUBSCAN_API_KEY;
-        
-        const response = await fetch('https://assethub-polkadot.api.subscan.io/api/v2/scan/search', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': apiKey || '',
-          },
-          body: JSON.stringify({
-            key: address,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Subscan API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setSubscanData(data);
-      } catch (error) {
-        console.error('Error fetching Subscan data:', error);
-        setSubscanError(error instanceof Error ? error.message : 'Failed to fetch Subscan data');
-      } finally {
-        setSubscanLoading(false);
-      }
-    };
-
-    fetchSubscanData();
-  }, [address]);
+  // Compute on-chain locked and available to unlock from vesting schedules
+  let onChainLocked = 0n;
+  if (hasVesting) {
+    let totalLocked = 0n;
+    let totalUnlocked = 0n;
+    (vestingInfo as VestingSchedule[]).forEach((schedule) => {
+      const locked = BigInt(schedule.locked);
+      const perBlock = BigInt(schedule.per_block);
+      const startingBlock = BigInt(schedule.starting_block);
+      totalLocked += locked;
+      const blocksElapsed = relayChainBlock > startingBlock ? relayChainBlock - startingBlock : 0n;
+      const unlocked = blocksElapsed * perBlock;
+      totalUnlocked += unlocked >= locked ? locked : unlocked;
+    });
+    onChainLocked = totalLocked - totalUnlocked;
+  }
+  const availableToUnlock = frozen > onChainLocked ? frozen - onChainLocked : 0n;
 
   if (!hasVesting) {
     return (
@@ -142,46 +116,20 @@ function ReadOnlyAccountVesting({
         
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-            <div className="text-xs text-gray-600 dark:text-gray-400">
-              Full Balance
-              {subscanLoading && <span className="ml-2 text-blue-500">⟳</span>}
-            </div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">Full Balance</div>
             <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-              {subscanLoading ? "Loading..." : `${fullBalance.toFixed(4)} DOT`}
+              {fullBalance.toFixed(4)} DOT
             </div>
           </div>
           <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-            <div className="text-xs text-gray-600 dark:text-gray-400">
-              Free Balance
-              {subscanLoading && <span className="ml-2 text-blue-500">⟳</span>}
-            </div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">Free Balance</div>
             <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-              {subscanLoading ? "Loading..." : `${freeBalance.toFixed(4)} DOT`}
+              {freeBalance.toFixed(4)} DOT
             </div>
           </div>
         </div>
-        
-        <div className="mt-4 text-center text-gray-600 dark:text-gray-400">No vesting schedule found</div>
 
-        {/* Subscan API Data Section */}
-        <div className="mt-6">
-          <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">Subscan API Data</h3>
-          {subscanLoading ? (
-            <div className="rounded-lg border border-gray-300 bg-gray-50 p-4 text-center dark:border-gray-600 dark:bg-gray-900/50">
-              <p className="text-gray-600 dark:text-gray-400">Loading Subscan data...</p>
-            </div>
-          ) : subscanError ? (
-            <div className="rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-700 dark:bg-red-900/20">
-              <p className="text-sm text-red-600 dark:text-red-400">Error: {subscanError}</p>
-            </div>
-          ) : (
-            <div className="overflow-auto rounded-lg border border-gray-300 bg-gray-50 p-4 dark:border-gray-600 dark:bg-gray-900/50">
-              <pre className="max-h-96 overflow-auto text-xs text-gray-900 dark:text-gray-100">
-                {JSON.stringify(subscanData, null, 2)}
-              </pre>
-            </div>
-          )}
-        </div>
+        <div className="mt-4 text-center text-gray-600 dark:text-gray-400">No vesting schedule found</div>
       </div>
     );
   }
@@ -196,21 +144,15 @@ function ReadOnlyAccountVesting({
       {/* Balance Information */}
       <div className="mb-6 grid grid-cols-2 gap-4">
         <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-          <div className="text-xs text-gray-600 dark:text-gray-400">
-            Full Balance
-            {subscanLoading && <span className="ml-2 text-blue-500">⟳</span>}
-          </div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">Full Balance</div>
           <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-            {subscanLoading ? "Loading..." : `${fullBalance.toFixed(4)} DOT`}
+            {fullBalance.toFixed(4)} DOT
           </div>
         </div>
         <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-          <div className="text-xs text-gray-600 dark:text-gray-400">
-            Free Balance
-            {subscanLoading && <span className="ml-2 text-blue-500">⟳</span>}
-          </div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">Free Balance</div>
           <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-            {subscanLoading ? "Loading..." : `${freeBalance.toFixed(4)} DOT`}
+            {freeBalance.toFixed(4)} DOT
           </div>
         </div>
       </div>
@@ -230,38 +172,11 @@ function ReadOnlyAccountVesting({
         />
         
         {/* Vested DOT Available for Unlock */}
-        {!subscanLoading && !subscanError && subscanData?.data?.account?.vesting?.total_locked && (
+        {availableToUnlock > 0n && (
           <div className="rounded-lg border-2 border-green-300 bg-gradient-to-br from-green-50 to-white p-5 shadow-md dark:border-green-700 dark:from-green-900/20 dark:to-gray-800/50">
             <div className="text-sm font-semibold text-gray-600 dark:text-gray-400">Vested DOT Available for Unlock</div>
             <div className="font-mono text-3xl font-bold text-green-600 dark:text-green-400">
-              {(() => {
-                // Calculate on-chain locked vesting
-                let totalLocked = 0n;
-                let totalUnlocked = 0n;
-                vestingInfo.forEach((schedule: VestingSchedule) => {
-                  const locked = BigInt(schedule.locked);
-                  const perBlock = BigInt(schedule.per_block);
-                  const startingBlock = BigInt(schedule.starting_block);
-                  totalLocked += locked;
-                  const blocksElapsed = relayChainBlock > startingBlock ? relayChainBlock - startingBlock : 0n;
-                  const unlocked = blocksElapsed * perBlock;
-                  if (unlocked >= locked) {
-                    totalUnlocked += locked;
-                  } else {
-                    totalUnlocked += unlocked;
-                  }
-                });
-                const onChainLocked = totalLocked - totalUnlocked;
-                
-                // Get Subscan locked value
-                const subscanLocked = BigInt(subscanData.data.account.vesting.total_locked);
-                
-                // Calculate absolute difference
-                const difference = onChainLocked > subscanLocked ? onChainLocked - subscanLocked : subscanLocked - onChainLocked;
-                const differenceInDOT = Number(difference) / 1e10;
-                
-                return `${differenceInDOT.toFixed(4)} DOT`;
-              })()}
+              {(Number(availableToUnlock) / 1e10).toFixed(4)} DOT
             </div>
             <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               Ready to be unlocked
@@ -312,25 +227,6 @@ function ReadOnlyAccountVesting({
         />
       )}
 
-      {/* Subscan API Data Section */}
-      <div className="mt-6">
-        <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">Subscan API Data</h3>
-        {subscanLoading ? (
-          <div className="rounded-lg border border-gray-300 bg-gray-50 p-4 text-center dark:border-gray-600 dark:bg-gray-900/50">
-            <p className="text-gray-600 dark:text-gray-400">Loading Subscan data...</p>
-          </div>
-        ) : subscanError ? (
-          <div className="rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-700 dark:bg-red-900/20">
-            <p className="text-sm text-red-600 dark:text-red-400">Error: {subscanError}</p>
-          </div>
-        ) : (
-          <div className="overflow-auto rounded-lg border border-gray-300 bg-gray-50 p-4 dark:border-gray-600 dark:bg-gray-900/50">
-            <pre className="max-h-96 overflow-auto text-xs text-gray-900 dark:text-gray-100">
-              {JSON.stringify(subscanData, null, 2)}
-            </pre>
-          </div>
-        )}
-      </div>
     </div>
   );
 }
