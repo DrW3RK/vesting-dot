@@ -134,7 +134,7 @@ function AccountVesting({
   const reserved = (accountInfo as any)?.data?.reserved ?? 0n;
   const frozen = (accountInfo as any)?.data?.frozen ?? 0n;
   const fullBalance = Number(free + reserved) / 1e10;
-  const freeBalance = Number(free - (frozen < free ? frozen : free)) / 1e10;
+  const freeBalance = Number(free + reserved - (frozen < free ? frozen : free)) / 1e10;
 
   // Compute on-chain locked and available to unlock from vesting schedules
   let onChainLocked = 0n;
