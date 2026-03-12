@@ -1,7 +1,7 @@
 import { ChainProvider, useAccounts, useLazyLoadQuery, useMutation } from "@reactive-dot/react";
 import { idle, MutationError, pending } from "@reactive-dot/core";
 import { getWalletMetadata } from "dot-connect";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { VestingGraph } from "./VestingGraph";
 import { ContactFooter } from "./ContactFooter";
 
@@ -110,14 +110,14 @@ function AccountVesting({
   account: any;
   relayChainBlock: bigint;
 }) {
-  const [subscanData, setSubscanData] = useState<any>(null);
-  const [subscanLoading, setSubscanLoading] = useState(true);
-  const [subscanError, setSubscanError] = useState<string | null>(null);
   const [vestSuccessful, setVestSuccessful] = useState(false);
-  const [isRefreshingBalance, setIsRefreshingBalance] = useState(false);
 
-  const vestingInfo = useLazyLoadQuery((builder) => 
+  const vestingInfo = useLazyLoadQuery((builder) =>
     builder.storage("Vesting", "Vesting", [address])
+  );
+
+  const accountInfo = useLazyLoadQuery((builder) =>
+    builder.storage("System", "Account", [address])
   );
 
   // Use mutation with signer from account
@@ -129,96 +129,39 @@ function AccountVesting({
   // State to track if we should hide the error after timeout
   const [showError, setShowError] = useState(true);
 
-  // Calculate balances from Subscan API data
-  const getBalancesFromSubscan = () => {
-    if (!subscanData?.data?.account) {
-      return { fullBalance: 0, freeBalance: 0 };
-    }
-    const balance = parseFloat(subscanData.data.account.balance || "0");
-    const balanceLock = parseFloat(subscanData.data.account.balance_lock || "0");
-    const freeBalance = balance - balanceLock;
-    return { fullBalance: balance, freeBalance };
-  };
+  // Balance calculations from on-chain data
+  const free = (accountInfo as any)?.data?.free ?? 0n;
+  const frozen = (accountInfo as any)?.data?.frozen ?? 0n;
+  const fullBalance = Number(free) / 1e10;
+  const freeBalance = Number(free - (frozen < free ? frozen : free)) / 1e10;
 
-  const { fullBalance, freeBalance } = getBalancesFromSubscan();
+  // Compute on-chain locked and available to unlock from vesting schedules
+  let onChainLocked = 0n;
+  if (vestingInfo && Array.isArray(vestingInfo)) {
+    let totalLocked = 0n;
+    let totalUnlocked = 0n;
+    (vestingInfo as VestingSchedule[]).forEach((schedule) => {
+      const locked = BigInt(schedule.locked);
+      const perBlock = BigInt(schedule.per_block);
+      const startingBlock = BigInt(schedule.starting_block);
+      totalLocked += locked;
+      const blocksElapsed = relayChainBlock > startingBlock ? relayChainBlock - startingBlock : 0n;
+      const unlocked = blocksElapsed * perBlock;
+      totalUnlocked += unlocked >= locked ? locked : unlocked;
+    });
+    onChainLocked = totalLocked - totalUnlocked;
+  }
+  // Available to unlock = difference between current frozen and what schedule says should be locked
+  const availableToUnlock = frozen > onChainLocked ? frozen - onChainLocked : 0n;
 
-  // Function to refresh balance from Subscan API
-  const refreshBalance = useCallback(async () => {
-    setIsRefreshingBalance(true);
-    try {
-      const apiKey = import.meta.env.VITE_SUBSCAN_API_KEY;
-      
-      // Wait a bit for the chain to update
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      const response = await fetch('https://assethub-polkadot.api.subscan.io/api/v2/scan/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-API-Key': apiKey || '',
-        },
-        body: JSON.stringify({
-          key: address,
-        }),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setSubscanData(data);
-      }
-    } catch (error) {
-      console.error('Error refreshing balance:', error);
-    } finally {
-      setIsRefreshingBalance(false);
-    }
-  }, [address]);
-
-  // Fetch Subscan data
-  useEffect(() => {
-    const fetchSubscanData = async () => {
-      setSubscanLoading(true);
-      setSubscanError(null);
-      
-      try {
-        const apiKey = import.meta.env.VITE_SUBSCAN_API_KEY;
-        
-        const response = await fetch('https://assethub-polkadot.api.subscan.io/api/v2/scan/search', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': apiKey || '',
-          },
-          body: JSON.stringify({
-            key: address,
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`Subscan API error: ${response.status}`);
-        }
-
-        const data = await response.json();
-        setSubscanData(data);
-      } catch (error) {
-        console.error('Error fetching Subscan data:', error);
-        setSubscanError(error instanceof Error ? error.message : 'Failed to fetch Subscan data');
-      } finally {
-        setSubscanLoading(false);
-      }
-    };
-
-    fetchSubscanData();
-  }, [address]);
-
-  // Track successful vest and refresh balance
+  // Track successful vest
   useEffect(() => {
     if (vestState !== idle && vestState !== pending && !(vestState instanceof MutationError)) {
       if (vestState.type === "finalized" && vestState.ok) {
         setVestSuccessful(true);
-        refreshBalance();
       }
     }
-  }, [vestState, refreshBalance]);
+  }, [vestState]);
 
   // Auto-reset error state after 3 seconds
   useEffect(() => {
@@ -339,21 +282,15 @@ function AccountVesting({
         {/* Show balances even if no vesting */}
         <div className="mt-4 grid grid-cols-2 gap-4">
           <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-            <div className="text-xs text-gray-600 dark:text-gray-400">
-              Full Balance
-              {subscanLoading && <span className="ml-2 text-blue-500">⟳</span>}
-            </div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">Full Balance</div>
             <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-              {subscanLoading ? "Loading..." : `${fullBalance.toFixed(4)} DOT`}
+              {fullBalance.toFixed(4)} DOT
             </div>
           </div>
           <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-            <div className="text-xs text-gray-600 dark:text-gray-400">
-              Free Balance
-              {subscanLoading && <span className="ml-2 text-blue-500">⟳</span>}
-            </div>
+            <div className="text-xs text-gray-600 dark:text-gray-400">Free Balance</div>
             <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-              {subscanLoading ? "Loading..." : `${freeBalance.toFixed(4)} DOT`}
+              {freeBalance.toFixed(4)} DOT
             </div>
           </div>
         </div>
@@ -374,21 +311,15 @@ function AccountVesting({
       {/* Balance Information */}
       <div className="mb-6 grid grid-cols-2 gap-4">
         <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-          <div className="text-xs text-gray-600 dark:text-gray-400">
-            Full Balance
-            {(subscanLoading || isRefreshingBalance) && <span className="ml-2 text-blue-500">⟳</span>}
-          </div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">Full Balance</div>
           <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-            {subscanLoading ? "Loading..." : `${fullBalance.toFixed(4)} DOT`}
+            {fullBalance.toFixed(4)} DOT
           </div>
         </div>
         <div className="rounded border border-gray-300 bg-gray-100 p-3 dark:border-gray-600 dark:bg-gray-900/50">
-          <div className="text-xs text-gray-600 dark:text-gray-400">
-            Free Balance
-            {(subscanLoading || isRefreshingBalance) && <span className="ml-2 text-blue-500">⟳</span>}
-          </div>
+          <div className="text-xs text-gray-600 dark:text-gray-400">Free Balance</div>
           <div className="font-mono text-lg font-semibold text-gray-900 dark:text-white">
-            {subscanLoading ? "Loading..." : `${freeBalance.toFixed(4)} DOT`}
+            {freeBalance.toFixed(4)} DOT
           </div>
         </div>
       </div>
@@ -447,45 +378,13 @@ function AccountVesting({
         />
         
         {/* Vested DOT Available for Unlock */}
-        {!subscanLoading && !subscanError && subscanData?.data?.account?.vesting?.total_locked && (
+        {availableToUnlock > 0n && (
           <div className="rounded-lg border-2 border-green-300 bg-gradient-to-br from-green-50 to-white p-5 shadow-md dark:border-green-700 dark:from-green-900/20 dark:to-gray-800/50">
             <div className="text-sm font-semibold text-gray-600 dark:text-gray-400">
               Vested DOT Available for Unlock
-              {isRefreshingBalance && <span className="ml-2 text-blue-500">⟳</span>}
             </div>
             <div className="font-mono text-3xl font-bold text-green-600 dark:text-green-400">
-              {vestSuccessful ? (
-                "0.0000 DOT"
-              ) : (
-                (() => {
-                  // Calculate on-chain locked vesting
-                  let totalLocked = 0n;
-                  let totalUnlocked = 0n;
-                  vestingInfo.forEach((schedule: VestingSchedule) => {
-                    const locked = BigInt(schedule.locked);
-                    const perBlock = BigInt(schedule.per_block);
-                    const startingBlock = BigInt(schedule.starting_block);
-                    totalLocked += locked;
-                    const blocksElapsed = relayChainBlock > startingBlock ? relayChainBlock - startingBlock : 0n;
-                    const unlocked = blocksElapsed * perBlock;
-                    if (unlocked >= locked) {
-                      totalUnlocked += locked;
-                    } else {
-                      totalUnlocked += unlocked;
-                    }
-                  });
-                  const onChainLocked = totalLocked - totalUnlocked;
-                  
-                  // Get Subscan locked value
-                  const subscanLocked = BigInt(subscanData.data.account.vesting.total_locked);
-                  
-                  // Calculate absolute difference
-                  const difference = onChainLocked > subscanLocked ? onChainLocked - subscanLocked : subscanLocked - onChainLocked;
-                  const differenceInDOT = Number(difference) / 1e10;
-                  
-                  return `${differenceInDOT.toFixed(4)} DOT`;
-                })()
-              )}
+              {vestSuccessful ? "0.0000 DOT" : `${(Number(availableToUnlock) / 1e10).toFixed(4)} DOT`}
             </div>
             <div className="mt-1 text-xs text-gray-500 dark:text-gray-400">
               {vestSuccessful ? "Successfully unlocked!" : "Ready to be unlocked"}
