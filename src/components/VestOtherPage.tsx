@@ -72,7 +72,11 @@ function LockedVestingAmount({
 // Helper to parse error messages for better UX
 function parseErrorMessage(error: MutationError): string {
   const message = error.message.toLowerCase();
-  
+
+  // Ledger metadata proof errors — CheckMetadataHash signed extension failure
+  if (message.includes('bad proof') || message.includes('badproof')) {
+    return "Transaction rejected: metadata proof verification failed. Please update your Ledger firmware and Polkadot app to the latest version, then try again.";
+  }
   // Ledger-specific errors
   if (message.includes('rejected') || message.includes('denied') || message.includes('cancelled') || message.includes('canceled')) {
     return "Transaction was rejected. Please try again.";
@@ -89,9 +93,17 @@ function parseErrorMessage(error: MutationError): string {
   if (message.includes('user rejected') || message.includes('user declined')) {
     return "Transaction was declined. Please try again when ready.";
   }
-  
+
   // Return original if no match, but clean it up
   return error.message || "Transaction failed. Please try again.";
+}
+
+// Helper to get error message for on-chain finalized failures
+function getFinalizedErrorMessage(isLedgerWallet: boolean): string {
+  if (isLedgerWallet) {
+    return "Transaction failed on-chain. If you see a 'bad proof' error, please ensure your Ledger firmware and Polkadot app are up to date, then try again.";
+  }
+  return "Transaction failed on-chain. Please try again.";
 }
 
 function VestOtherAccountVesting({ 
@@ -252,7 +264,14 @@ function VestOtherAccountVesting({
   };
 
   const buttonState = getButtonState();
-  const errorMessage = (vestState instanceof MutationError && showError) ? parseErrorMessage(vestState) : null;
+  const errorMessage = showError
+    ? vestState instanceof MutationError
+      ? parseErrorMessage(vestState)
+      : vestState !== idle && vestState !== pending && !(vestState instanceof MutationError) &&
+        vestState.type === "finalized" && !vestState.ok
+      ? getFinalizedErrorMessage(isLedgerWallet)
+      : null
+    : null;
 
   if (!hasVesting) {
     return (
